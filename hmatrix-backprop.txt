@@ -23,8 +23,8 @@ data L (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
 type Sq (n :: Nat) = L n n
 row :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (L 1 n)
 col :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (L n 1)
-(|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L c r1) -> BVar s (L c r2) -> BVar s (L c (r1 + r2))
-(===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L r1 c) -> BVar s (L r2 c) -> BVar s (L (r1 + r2) c)
+(|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L c r1) -> BVar s (L c r2) -> BVar s (L c (r1 + r2))
+(===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L r1 c) -> BVar s (L r2 c) -> BVar s (L (r1 + r2) c)
 tr :: (Reifies s W, Transposable m mt, Transposable mt m, Num m, Num mt) => BVar s m -> BVar s mt
 eye :: KnownNat n => Sq n
 diag :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (Sq n)
