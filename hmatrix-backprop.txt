@@ -36,3 +36,16 @@ data Her (n :: Nat) :: Nat -> *
 (<>) :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n) => BVar s (L m k) -> BVar s (L k n) -> BVar s (L m n)
 (#>) :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n) -> BVar s (R m)
 (<.>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
+
+-- | Length
+norm_0 :: (Reifies s W, Normed a, Num a) => BVar s a -> BVar s ℝ
+
+-- | Sum of absolute values
+norm_1 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
+
+-- | Square root of sum of squares
+norm_2 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
+
+-- | Maximum absolute value
+norm_Inf :: (Reifies s W, Normed a, Num a, Sized ℝ a d, Container d ℝ) => BVar s a -> BVar s ℝ
+mean :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> BVar s ℝ
