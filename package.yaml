@@ -26,6 +26,8 @@ dependencies:
 - ghc-typelits-natnormalise
 - ghc-typelits-knownnat
 - microlens
+- vector
+- vector-sized
 
 ghc-options:
 - -Wall
