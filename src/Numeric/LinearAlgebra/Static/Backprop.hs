@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds                                #-}
 {-# LANGUAGE FlexibleContexts                         #-}
 {-# LANGUAGE GADTs                                    #-}
+{-# LANGUAGE PolyKinds                                #-}
 {-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
 {-# LANGUAGE TypeApplications                         #-}
@@ -8,6 +9,8 @@
 {-# LANGUAGE ViewPatterns                             #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
+
+-- | https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
 
 module Numeric.LinearAlgebra.Static.Backprop (
     H.R
@@ -20,6 +23,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , split
   , headTail
   , vector
+  , linspace
   , H.range
   , H.dim
   , H.L
@@ -35,6 +39,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , tr
   , H.eye
   , diag
+  , matrix
   , H.ℂ
   , H.C
   , H.M
@@ -61,15 +66,22 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , app
   , dot
   , cross
+  , diagR
   , dvmap
   , dvmap'
   , dmmap
+  , dmmap'
+  , outer
   , zipWithVector
   , zipWithVector'
   , det
   , invlndet
   , lndet
   , inv
+  , toRows
+  , toColumns
+  , fromRows
+  , fromColumns
   , takeDiag
   , H.Sym
   , sym
@@ -178,8 +190,18 @@ vector vs = case SV.fromList @n vs of
                 )
                 (collectVar vs')
 
--- TODO: linspace
--- TODO: build ???
+linspace
+    :: forall n s. (Reifies s W, KnownNat n)
+    => BVar s H.ℝ
+    -> BVar s H.ℝ
+    -> BVar s (H.R n)
+linspace = liftOp2 . op2 $ \l u ->
+    ( H.linspace (l, u)
+    , \d -> let n1 = fromInteger $ natVal (Proxy @n) - 1
+                dDot = ((H.range - 1) H.<.> d) / n1
+                dSum = HU.sumElements . H.extract $ d
+            in  (dSum - dDot, dDot)
+    )
 
 row :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
@@ -248,8 +270,24 @@ diag
     -> BVar s (H.Sq n)
 diag = liftOp1 . op1 $ \x -> (H.diag x, H.takeDiag)
 
--- TODO: matrix
--- TODO: her
+-- | Potentially extremely bad for anything but short lists!!!
+matrix
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => [BVar s H.ℝ]
+    -> BVar s (H.L m n)
+matrix vs = case SV.fromList @(m * n) vs of
+    Nothing  -> error "matrix: invalid number of elements"
+    Just vs' ->
+        liftOp1 (opIso (fromJust . H.create   . HU.reshape n . VG.convert . SV.fromSized)
+                       (fromJust . SV.toSized . VG.convert   . HU.flatten . H.extract   )
+                )
+                (collectVar vs')
+  where
+    n = fromInteger $ natVal (Proxy @n)
+
+
+-- TODO: her??
+-- cannot: no Num instance for Her
 
 (<>)
     :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n)
@@ -343,7 +381,9 @@ chol = liftOp1 . op1 $ \x ->
                  in  unsafeCoerce $ s + H.tr s - H.eye * s  -- correct?
         )
 
--- | Length
+-- | number of non-zero items
+--
+-- not really well defined?
 norm_0
     :: (Reifies s W, H.Normed a, Num a)
     => BVar s a
@@ -351,6 +391,8 @@ norm_0
 norm_0 = liftOp1 . op1 $ \x -> (H.norm_0 x, const 0)
 
 -- | Sum of absolute values
+--
+-- Does this work for matricies?
 norm_1
     :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d)
     => BVar s a
@@ -360,6 +402,8 @@ norm_1 = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
 -- | Square root of sum of squares
 --
 -- Be aware that gradient diverges when the norm is zero
+--
+-- Does this work for matricies?
 norm_2
     :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d)
     => BVar s a
@@ -369,6 +413,8 @@ norm_2 = liftOp1 . op1 $ \x ->
     in (n, \d -> x * H.konst (d / n))
 
 -- | Maximum absolute value
+--
+-- Does this work for matricies?
 norm_Inf
     :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d, HU.Container d H.ℝ)
     => BVar s a
@@ -479,7 +525,28 @@ cross = liftOp2 . op2 $ \x y ->
     , \d -> (y `H.cross` d, d `H.cross` x)  -- is sign correct?
     )
 
--- TODO: diagR
+diagR
+    :: forall m n k field vec mat s.
+      ( Reifies s W
+       , H.Domain field vec mat
+       , Num (vec k)
+       , Num (mat m n)
+       , KnownNat m
+       , KnownNat n
+       , KnownNat k
+       , HU.Container HU.Vector field
+       , H.Sized field (mat m n) HU.Matrix
+       , H.Sized field (vec k) HU.Vector
+       )
+    => BVar s field
+    -> BVar s (vec k)
+    -> BVar s (mat m n)
+diagR = liftOp2 . op2 $ \c x ->
+    ( H.diagR c x
+    , \d -> ( HU.sumElements . H.extract $ H.diagR 1 (0 :: vec k) * d
+            , fromJust . H.create . HU.takeDiag . H.extract $ d
+            )
+    )
 
 dvmap
     :: ( Reifies s W
@@ -500,7 +567,12 @@ dvmap f = liftOp1 . op1 $ \x ->
 -- | A version of 'dvmap' that is less performant but is based on
 -- 'H.zipWithVector' from 'H.Domain'.
 dvmap'
-    :: (Reifies s W, KnownNat n, H.Domain field vec mat, Num (vec n), Num field)
+    :: ( Reifies s W
+       , KnownNat n
+       , H.Domain field vec mat
+       , Num (vec n)
+       , Num field
+       )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
     -> BVar s (vec n)
@@ -509,18 +581,64 @@ dvmap' f = liftOp1 . op1 $ \x ->
     , (H.dvmap (gradBP f) x *)
     )
 
--- TODO: performant version w/o domain
 dmmap
-    :: (Reifies s W, KnownNat n, KnownNat m, H.Domain field vec mat, Num (mat n m), Num field)
+    :: forall n m mat field s.
+       ( Reifies s W
+       , KnownNat m
+       , Num (mat n m)
+       , Storable (field, field)
+       , H.Sized field (mat n m) HU.Matrix
+       , HU.Element field
+       )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
     -> BVar s (mat n m)
 dmmap f = liftOp1 . op1 $ \x ->
+    let (y', dx') = HU.unzipVector
+                  . VG.map (backprop f)
+                  . HU.flatten
+                  $ H.extract x
+    in  ( fromJust . H.create . HU.reshape m $ y'
+        , \d -> (* d) . fromJust . H.create . HU.reshape m $ dx'
+        )
+  where
+    m :: Int
+    m = fromInteger $ natVal (Proxy @m)
+
+dmmap'
+    :: ( Reifies s W
+       , KnownNat n
+       , KnownNat m
+       , H.Domain field vec mat
+       , Num (mat n m)
+       , Num field
+       )
+    => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
+    -> BVar s (mat n m)
+    -> BVar s (mat n m)
+dmmap' f = liftOp1 . op1 $ \x ->
     ( H.dmmap (evalBP f) x
     , (H.dmmap (gradBP f) x *)
     )
 
--- TODO: outer
+outer
+    :: ( Reifies s W
+       , KnownNat m
+       , KnownNat n
+       , H.Domain field vec mat
+       , HU.Transposable (mat n m) (mat m n)
+       , Num (vec n)
+       , Num (vec m)
+       , Num (mat n m)
+       )
+    => BVar s (vec n)
+    -> BVar s (vec m)
+    -> BVar s (mat n m)
+outer = liftOp2 . op2 $ \x y ->
+    ( x `H.outer` y
+    , \d -> ( d `H.app` y
+            , H.tr d `H.app` x)
+    )
 
 zipWithVector
     :: ( Reifies s W
@@ -617,7 +735,10 @@ lndet = liftOp1 . op1 $ \x ->
           in  (ldet, (* H.tr i) . H.konst)
 
 -- TODO: expm ???
+-- https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
+
 -- TODO: sqrtm ???
+-- http://people.cs.umass.edu/~smaji/projects/matrix-sqrt/
 
 inv :: ( Reifies s W
        , KnownNat n
@@ -630,7 +751,44 @@ inv = liftOp1 . op1 $ \x ->
     let xInv = H.inv x
     in  ( xInv, \d -> -d * (xInv `H.mul` xInv) )
 
--- TODO: toRows/toCols/withRows/withCols ??
+-- TODO: withRows/withCols ??
+-- Is it possible or meaningful?
+
+rowsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector m (H.R n)
+rowsV = fromJust . SV.fromList . H.toRows
+
+colsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector n (H.R m)
+colsV = fromJust . SV.fromList . H.toColumns
+
+vRows :: (KnownNat m, KnownNat n) => SV.Vector m (H.R n) -> H.L m n
+vRows = (`H.withRows` fromJust . H.exactDims) . SV.toList
+
+vCols :: (KnownNat m, KnownNat n) => SV.Vector n (H.R m) -> H.L m n
+vCols = (`H.withColumns` fromJust . H.exactDims) . SV.toList
+
+toRows
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => BVar s (H.L m n)
+    -> SV.Vector m (BVar s (H.R n))
+toRows = sequenceVar . liftOp1 (opIso rowsV vRows)
+
+toColumns
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => BVar s (H.L m n)
+    -> SV.Vector n (BVar s (H.R m))
+toColumns = sequenceVar . liftOp1 (opIso colsV vCols)
+
+fromRows
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => SV.Vector m (BVar s (H.R n))
+    -> BVar s (H.L m n)
+fromRows = liftOp1 (opIso vRows rowsV) . collectVar
+
+fromColumns
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => SV.Vector m (BVar s (H.R n))
+    -> BVar s (H.L m n)
+fromColumns = liftOp1 (opIso vRows rowsV) . collectVar
 
 takeDiag
     :: ( Reifies s W
