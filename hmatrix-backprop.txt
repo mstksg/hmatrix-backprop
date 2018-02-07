@@ -7,6 +7,8 @@
 @package hmatrix-backprop
 @version 0.1.0.0
 
+
+-- | <a>https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf</a>
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
 type ℝ = Double
@@ -22,6 +24,7 @@ headTail :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> (BVar s ℝ, BV
 
 -- | Potentially extremely bad for anything but short lists!!!
 vector :: forall n s. (Reifies s W, KnownNat n) => [BVar s ℝ] -> BVar s (R n)
+linspace :: forall n s. (Reifies s W, KnownNat n) => BVar s ℝ -> BVar s ℝ -> BVar s (R n)
 range :: KnownNat n => R n
 dim :: KnownNat n => R n
 data L (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
@@ -39,6 +42,9 @@ uncol :: (Reifies s W, KnownNat n) => BVar s (L n 1) -> BVar s (R n)
 tr :: (Reifies s W, Transposable m mt, Transposable mt m, Num m, Num mt) => BVar s m -> BVar s mt
 eye :: KnownNat n => Sq n
 diag :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (Sq n)
+
+-- | Potentially extremely bad for anything but short lists!!!
+matrix :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => [BVar s ℝ] -> BVar s (L m n)
 type ℂ = Complex Double
 data C (n :: Nat) :: Nat -> *
 data M (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
@@ -65,18 +71,26 @@ chol :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 -- | p-norm for vectors, operator norm for matrices
 class Normed a
 
--- | Length
+-- | number of non-zero items
+--   
+--   not really well defined?
 norm_0 :: (Reifies s W, Normed a, Num a) => BVar s a -> BVar s ℝ
 
 -- | Sum of absolute values
+--   
+--   Does this work for matricies?
 norm_1 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
 
 -- | Square root of sum of squares
 --   
 --   Be aware that gradient diverges when the norm is zero
+--   
+--   Does this work for matricies?
 norm_2 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
 
 -- | Maximum absolute value
+--   
+--   Does this work for matricies?
 norm_Inf :: (Reifies s W, Normed a, Num a, Sized ℝ a d, Container d ℝ) => BVar s a -> BVar s ℝ
 mean :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> BVar s ℝ
 meanCov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> (BVar s (R n), BVar s (Sym n))
@@ -88,12 +102,15 @@ mul :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n, Domain field vec mat, N
 app :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Num (mat m n), Num (vec n), Num (vec m), Transposable (mat m n) (mat n m)) => BVar s (mat m n) -> BVar s (vec n) -> BVar s (vec m)
 dot :: (Reifies s W, KnownNat n, Domain field vec mat, Sized field (vec n) d, Num (vec n)) => BVar s (vec n) -> BVar s (vec n) -> BVar s field
 cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
+diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
 dvmap :: (Reifies s W, Num (vec n), Storable field, Storable (field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | A version of <a>dvmap</a> that is less performant but is based on
 --   <a>zipWithVector</a> from <a>Domain</a>.
 dvmap' :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
-dmmap :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+dmmap :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Storable (field, field), Sized field (mat n m) Matrix, Element field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+dmmap' :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+outer :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Num (vec n), Num (vec m), Num (mat n m)) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
 zipWithVector :: (Reifies s W, Num (vec n), Storable field, Storable (field, field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | A version of <a>zipWithVector</a> that is less performant but is based
@@ -103,6 +120,10 @@ det :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized fiel
 invlndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
 lndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
 inv :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat) => BVar s (mat n n) -> BVar s (mat n n)
+toRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector m (BVar s (R n))
+toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector n (BVar s (R m))
+fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
+fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
 takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
 data Sym (n :: Nat) :: Nat -> *
 sym :: (Reifies s W, KnownNat n) => BVar s (Sq n) -> BVar s (Sym n)
