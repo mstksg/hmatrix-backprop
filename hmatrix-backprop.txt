@@ -8,11 +8,69 @@
 @version 0.1.0.0
 
 
--- | <a>https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf</a>
+-- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
+--   and matrix operations based on blas/lapack) that allows its operations
+--   to work with <a>backprop</a>.
 --   
---   <a>http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf</a>
+--   In short, these functions are "lifted" to work with <a>BVar</a>s.
 --   
---   <a>http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf</a>
+--   Using <a>evalBP</a> will run the original operation:
+--   
+--   <pre>
+--   <a>evalBP</a> :: (forall s. <a>Reifies</a> s <a>W</a>. <a>BVar</a> s a -&gt; <a>BVar</a> s b) -&gt; a -&gt; b
+--   </pre>
+--   
+--   But using <a>gradBP</a> or <a>backprop</a> will give you the gradient:
+--   
+--   <pre>
+--   <a>gradBP</a> :: (forall s. <a>Reifies</a> s <a>W</a>. <a>BVar</a> s a -&gt; <a>BVar</a> s b) -&gt; a -&gt; a
+--   </pre>
+--   
+--   These can act as a drop-in replacement to the API of
+--   <a>Numeric.LinearAlgebra.Static</a>. Just change your imports, and
+--   your functions are automatically backpropagatable. Useful types are
+--   all re-exported.
+--   
+--   Formulas for gradients come from the following papers:
+--   
+--   <ul>
+--   
+--   <li><a>https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf</a></li>
+--   <li><a>http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf</a></li>
+--   
+--   <li><a>http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf</a></li>
+--   <li><a>https://arxiv.org/abs/1602.07527</a></li>
+--   </ul>
+--   
+--   Some functions are notably unlifted:
+--   
+--   <ul>
+--   <li><a>svd</a>: I can't find any resources that allow you to
+--   backpropagate if the U and V matrices are used! If you find one, let
+--   me know, or feel free to submit a PR! Because of this, Currently only
+--   a version that exports only the singular values is exported.
+--   <a>svd_</a> works for <a>evalBP</a> but not <a>gradBP</a>.</li>
+--   <li><a>svdTall</a>, <a>svdFlat</a>: Not sure where to start for
+--   these</li>
+--   <li><tt>qr</tt>: Same story</li>
+--   <li><a>her</a>: No <a>Num</a> instance for <a>Her</a> makes this
+--   impossible at the moment with the current backprop API</li>
+--   <li><a>exmp</a>: Definitely possible, but I haven't dug deep enough to
+--   figure it out yet! There is a description here
+--   <a>https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf</a> but it
+--   requires some things I am not familiar with yet. Feel free to submit a
+--   PR!</li>
+--   <li><a>sqrtm</a>: Also likely possible. Maybe try to translate
+--   <a>http://people.cs.umass.edu/~smaji/projects/matrix-sqrt/</a> ? PRs
+--   welcomed!</li>
+--   <li><a>linSolve</a>: Haven't figured out where to start!</li>
+--   <li><a>&lt;/&gt;</a>: Same story</li>
+--   <li>Functions returning existential types, like <a>withNullSpace</a>,
+--   <a>withOrth</a>, <a>withRows</a>, etc.; not quite sure what the best
+--   way to handle these are at the moment.</li>
+--   <li><a>withRows</a> and <a>withColumns</a> made "type-safe", without
+--   existential types, with <a>fromRows</a> and <tt>fromCOlumns</tt>.</li>
+--   </ul>
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
 type ℝ = Double
@@ -53,10 +111,16 @@ type ℂ = Complex Double
 data C (n :: Nat) :: Nat -> *
 data M (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
 𝑖 :: Sized ℂ s c => s
+
+-- | Matrix product
 (<>) :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n) => BVar s (L m k) -> BVar s (L k n) -> BVar s (L m n)
 infixr 8 <>
+
+-- | Matrix-vector product
 (#>) :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n) -> BVar s (R m)
 infixr 8 #>
+
+-- | Dot product
 (<.>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <.>
 
@@ -78,7 +142,10 @@ eigensystem :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> (BVar 
 -- | TODO: check if gradient is really symmetric
 eigenvalues :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (R n)
 
--- | <a>https://arxiv.org/abs/1602.07527</a>
+-- | Algorithm from <a>https://arxiv.org/abs/1602.07527</a>
+--   
+--   The paper also suggests a potential imperative algorithm that might
+--   help. Need to benchmark to see what is best.
 --   
 --   TODO: Check if gradient is really symmetric
 chol :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
@@ -86,37 +153,45 @@ chol :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 -- | p-norm for vectors, operator norm for matrices
 class Normed a
 
--- | number of non-zero items
---   
---   not really well defined?
+-- | Number of non-zero items
 norm_0 :: (Reifies s W, Normed a, Num a) => BVar s a -> BVar s ℝ
 
 -- | Sum of absolute values
---   
---   Does this work for matricies?
-norm_1 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
+norm_1V :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+
+-- | Maximum norm_1 of columns
+norm_1M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 
 -- | Square root of sum of squares
 --   
 --   Be aware that gradient diverges when the norm is zero
---   
---   Does this work for matricies?
-norm_2 :: (Reifies s W, Normed a, Num a, Sized ℝ a d) => BVar s a -> BVar s ℝ
+norm_2V :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+
+-- | Maximum singular value
+norm_2M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 
 -- | Maximum absolute value
---   
---   Does this work for matricies?
-norm_Inf :: (Reifies s W, Normed a, Num a, Sized ℝ a d, Container d ℝ) => BVar s a -> BVar s ℝ
+norm_InfV :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+
+-- | Maximum norm_1 of rows
+norm_InfM :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 mean :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> BVar s ℝ
+
+-- | Mean and covariance. If you know you won't use the covariance, it is
+--   best to use <a>meanL</a>.
 meanCov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> (BVar s (R n), BVar s (Sym n))
 
 -- | <a>meanCov</a>, but if you know you won't use the covariance.
 meanL :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> BVar s (R n)
+class Disp t
+disp :: Disp t => Int -> t -> IO ()
 class Domain field (vec :: Nat -> *) (mat :: Nat -> Nat -> *) | mat -> vec field, vec -> mat field, field -> mat vec
 mul :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n, Domain field vec mat, Num (mat m k), Num (mat k n), Num (mat m n), Transposable (mat m k) (mat k m), Transposable (mat k n) (mat n k)) => BVar s (mat m k) -> BVar s (mat k n) -> BVar s (mat m n)
 app :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Num (mat m n), Num (vec n), Num (vec m), Transposable (mat m n) (mat n m)) => BVar s (mat m n) -> BVar s (vec n) -> BVar s (vec m)
 dot :: (Reifies s W, KnownNat n, Domain field vec mat, Sized field (vec n) d, Num (vec n)) => BVar s (vec n) -> BVar s (vec n) -> BVar s field
 cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
+
+-- | Create matrix with diagonal, and fill with default entries
 diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
 dvmap :: (Reifies s W, Num (vec n), Storable field, Storable (field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
@@ -132,19 +207,48 @@ zipWithVector :: (Reifies s W, Num (vec n), Storable field, Storable (field, fie
 --   on <a>zipWithVector</a> from <a>Domain</a>.
 zipWithVector' :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 det :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
+
+-- | The inverse and the natural log of the determinant together. If you
+--   know you don't need the inverse, it is best to use <a>lndet</a>.
 invlndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
+
+-- | The natural log of the determinant.
 lndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
 inv :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat) => BVar s (mat n n) -> BVar s (mat n n)
 toRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector m (BVar s (R n))
 toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector n (BVar s (R m))
 fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
 fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
+konst :: (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
+
+-- | If there are extra items in the total derivative, they are dropped. If
+--   there are missing items, they are treated as zero.
+extractV :: (Reifies q W, Sized t s Vector, Num s, Konst t Int Vector, Container Vector t, Num (Vector t)) => BVar q s -> BVar q (Vector t)
+
+-- | If there are extra items in the total derivative, they are dropped. If
+--   there are missing items, they are treated as zero.
+extractM :: (Reifies q W, Sized t s Matrix, Num s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t)) => BVar q s -> BVar q (Matrix t)
+create :: (Reifies q W, Sized t s d, Num s, Num (d t)) => BVar q (d t) -> Maybe (BVar q s)
+class Diag m d | m -> d
 takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
 data Sym (n :: Nat) :: Nat -> *
+
+-- | $(M + M^T) / 2$
 sym :: (Reifies s W, KnownNat n) => BVar s (Sq n) -> BVar s (Sym n)
+
+-- | $M^T M$
 mTm :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (Sym n)
 
--- | TODO: Decide if it makes sense if gradient is not symmetric.
+-- | Warning: the gradient is going to not be symmetric, and so is
+--   <i>not</i> meant to be used directly. Rather, it is meant to be used
+--   in the middle (or at the end) of a longer computation.
 unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
+
+-- | Unicode synonym for <tt>&lt;.&gt;&gt;</tt>
 (<·>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <·>
+instance Data.Traversable.Traversable Numeric.LinearAlgebra.Static.Backprop.Mayb
+instance Data.Foldable.Foldable Numeric.LinearAlgebra.Static.Backprop.Mayb
+instance GHC.Base.Applicative Numeric.LinearAlgebra.Static.Backprop.Mayb
+instance GHC.Base.Functor Numeric.LinearAlgebra.Static.Backprop.Mayb
+instance GHC.Num.Num a => GHC.Num.Num (Numeric.LinearAlgebra.Static.Backprop.Mayb a)
