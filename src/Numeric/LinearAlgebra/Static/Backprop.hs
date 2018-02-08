@@ -11,6 +11,10 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
 -- | https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
+--
+-- http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf
+--
+-- http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf
 
 module Numeric.LinearAlgebra.Static.Backprop (
     H.R
@@ -43,12 +47,12 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , H.ℂ
   , H.C
   , H.M
-  , H.Her
   , H.𝑖
   , (<>)
   , (#>)
   , (<.>)
   , svd
+  , svd_
   , H.Eigen
   , eigensystem
   , eigenvalues
@@ -86,6 +90,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , H.Sym
   , sym
   , mTm
+  , unSym
   , (<·>)
   ) where
 
@@ -95,6 +100,7 @@ import           Foreign.Storable
 import           GHC.TypeLits
 import           Lens.Micro hiding            ((&))
 import           Numeric.Backprop
+import           Numeric.Backprop.Op
 import           Numeric.Backprop.Tuple
 import           Unsafe.Coerce
 import qualified Data.Vector.Generic          as VG
@@ -108,11 +114,10 @@ vec2
     => BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 2)
-vec2 = liftOp2 . op2 $ \x y ->
-    ( H.vec2 x y
-    , \(HU.toList . H.extract -> [dx,dy]) -> (dx, dy)
-    )
--- TODO: opIsoN
+vec2 = liftOp2 $ opIsoN
+    (\(x ::< y ::< Ø)                -> H.vec2 x y     )
+    (\(HU.toList.H.extract->[dx,dy]) -> dx ::< dy ::< Ø)
+{-# INLINE vec2 #-}
 
 vec3
     :: Reifies s W
@@ -120,10 +125,10 @@ vec3
     -> BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 3)
-vec3 = liftOp3 . op3 $ \x y z ->
-    ( H.vec3 x y z
-    , \(HU.toList . H.extract -> [dx,dy,dz]) -> (dx, dy, dz)
-    )
+vec3 = liftOp3 $ opIsoN
+    (\(x ::< y ::< z ::< Ø)             -> H.vec3 x y z          )
+    (\(HU.toList.H.extract->[dx,dy,dz]) -> dx ::< dy ::< dz ::< Ø)
+{-# INLINE vec3 #-}
 
 vec4
     :: Reifies s W
@@ -132,30 +137,34 @@ vec4
     -> BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 4)
-vec4 x y z w = liftOp o (x :< y :< z :< w :< Ø)
+vec4 vX vY vZ vW = liftOp o (vX :< vY :< vZ :< vW :< Ø)
   where
     o :: Op '[H.ℝ, H.ℝ, H.ℝ, H.ℝ] (H.R 4)
-    o = Op $ \(x' ::< y' ::< z' ::< w' ::< Ø) ->
-      ( H.vec4 x' y' z' w'
-      , \(HU.toList . H.extract -> [dx,dy,dz,dw]) -> dx ::< dy ::< dz ::< dw ::< Ø
-      )
+    o = opIsoN
+      (\(x ::< y ::< z ::< w ::< Ø)          -> H.vec4 x y z w               )
+      (\(HU.toList.H.extract->[dx,dy,dz,dw]) -> dx ::< dy ::< dz ::< dw ::< Ø)
+    {-# INLINE o #-}
+{-# INLINE vec4 #-}
 
 (&) :: (Reifies s W, KnownNat n, 1 <= n, KnownNat (n + 1))
     => BVar s (H.R n)
     -> BVar s H.ℝ
     -> BVar s (H.R (n + 1))
-(&) = liftOp2 . op2 $ \xs x ->
-    ( xs H.& x
-    , \(H.split->(dxs,dx)) -> (dxs, fst (H.headTail dx))
-    )
+(&) = liftOp2 $ opIsoN
+    (\(xs ::< y ::< Ø)    -> xs H.& y                         )
+    (\(H.split->(dxs,dy)) -> dxs ::< fst (H.headTail dy) ::< Ø)
 infixl 4 &
+{-# INLINE (&) #-}
 
 (#) :: (Reifies s W, KnownNat n, KnownNat m)
     => BVar s (H.R n)
     -> BVar s (H.R m)
     -> BVar s (H.R (n + m))
-(#) = liftOp2 . op2 $ \x y -> ( x H.# y, H.split )
+(#) = liftOp2 $ opIsoN
+    (\(x ::< y ::< Ø)    -> x H.# y        )
+    (\(H.split->(dX,dY)) -> dX ::< dY ::< Ø)
 infixl 4 #
+{-# INLINE (#) #-}
 
 split
     :: (Reifies s W, KnownNat p, KnownNat n, p <= n)
@@ -163,9 +172,11 @@ split
     -> (BVar s (H.R p), BVar s (H.R (n - p)))
 split v = (t ^^. _1, t ^^. _2)      -- should we just return the T2 ?
   where
-    t = liftOp1 (opIso (tupT2         . H.split)
-                       (uncurry (H.#) . t2Tup  )    -- TODO: uncurryT2
+    t = liftOp1 (opIso (tupT2 . H.split)
+                       (uncurryT2 (H.#))
                 ) v
+    {-# NOINLINE t #-}
+{-# INLINE split #-}
 
 headTail
     :: (Reifies s W, KnownNat n, 1 <= n)
@@ -176,6 +187,8 @@ headTail v = (t ^^. _1, t ^^. _2)
     t = liftOp1 (opIso (tupT2 . H.headTail)
                        (\(T2 d dx) -> (H.konst d :: H.R 1) H.# dx)
                 ) v
+    {-# NOINLINE t #-}
+{-# INLINE headTail #-}
 
 -- | Potentially extremely bad for anything but short lists!!!
 vector
@@ -189,6 +202,7 @@ vector vs = case SV.fromList @n vs of
                        (fromJust . SV.toSized . VG.convert . H.extract   )
                 )
                 (collectVar vs')
+{-# INLINE vector #-}
 
 linspace
     :: forall n s. (Reifies s W, KnownNat n)
@@ -202,30 +216,39 @@ linspace = liftOp2 . op2 $ \l u ->
                 dSum = HU.sumElements . H.extract $ d
             in  (dSum - dDot, dDot)
     )
+{-# INLINE linspace #-}
 
 row :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
     -> BVar s (H.L 1 n)
 row = liftOp1 $ opIso H.row H.unrow
+{-# INLINE row #-}
 
 col :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
     -> BVar s (H.L n 1)
 col = liftOp1 $ opIso H.col H.uncol
+{-# INLINE col #-}
 
 (|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2))
       => BVar s (H.L c r1)
       -> BVar s (H.L c r2)
       -> BVar s (H.L c (r1 + r2))
-(|||) = liftOp2 . op2 $ \x y -> (x H.||| y, H.splitCols)
+(|||) = liftOp2 $ opIsoN
+    (\(x ::< y ::< Ø)        -> x H.||| y        )
+    (\(H.splitCols->(dX,dY)) -> dX ::< dY ::< Ø)
 infixl 3 |||
+{-# INLINE (|||) #-}
 
 (===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2))
       => BVar s (H.L r1        c)
       -> BVar s (H.L r2        c)
       -> BVar s (H.L (r1 + r2) c)
-(===) = liftOp2 . op2 $ \x y -> (x H.=== y, H.splitRows)
+(===) = liftOp2 $ opIsoN
+    (\(x ::< y ::< Ø)        -> x H.=== y        )
+    (\(H.splitRows->(dX,dY)) -> dX ::< dY ::< Ø)
 infixl 2 ===
+{-# INLINE (===) #-}
 
 splitRows
     :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m)
@@ -236,6 +259,8 @@ splitRows v = (t ^^. _1, t ^^. _2)
     t = liftOp1 (opIso (tupT2 . H.splitRows)
                        (\(T2 dx dy) -> dx H.=== dy)
                 ) v
+    {-# NOINLINE t #-}
+{-# INLINE splitRows #-}
 
 splitCols
     :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n)
@@ -244,31 +269,37 @@ splitCols
 splitCols v = (t ^^. _1, t ^^. _2)
   where
     t = liftOp1 (opIso (tupT2 . H.splitCols)
-                       (\(T2 dx dy) -> dx H.||| dy)
+                       (uncurryT2 (H.|||))
                 ) v
+    {-# NOINLINE t #-}
+{-# INLINE splitCols #-}
 
 unrow
     :: (Reifies s W, KnownNat n)
     => BVar s (H.L 1 n)
     -> BVar s (H.R n)
 unrow = liftOp1 $ opIso H.unrow H.row
+{-# INLINE unrow #-}
 
 uncol
     :: (Reifies s W, KnownNat n)
     => BVar s (H.L n 1)
     -> BVar s (H.R n)
 uncol = liftOp1 $ opIso H.uncol H.col
+{-# INLINE uncol #-}
 
 tr  :: (Reifies s W, HU.Transposable m mt, HU.Transposable mt m, Num m, Num mt)
     => BVar s m
     -> BVar s mt
-tr = liftOp1 . op1 $ \x -> (H.tr x, H.tr)
+tr = liftOp1 $ opIso H.tr H.tr
+{-# INLINE tr #-}
 
 diag
     :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
     -> BVar s (H.Sq n)
 diag = liftOp1 . op1 $ \x -> (H.diag x, H.takeDiag)
+{-# INLINE diag #-}
 
 -- | Potentially extremely bad for anything but short lists!!!
 matrix
@@ -284,6 +315,7 @@ matrix vs = case SV.fromList @(m * n) vs of
                 (collectVar vs')
   where
     n = fromInteger $ natVal (Proxy @n)
+{-# INLINE matrix #-}
 
 
 -- TODO: her??
@@ -296,6 +328,7 @@ matrix vs = case SV.fromList @(m * n) vs of
     -> BVar s (H.L m n)
 (<>) = mul
 infixr 8 <>
+{-# INLINE (<>) #-}
 
 (#>)
     :: (Reifies s W, KnownNat m, KnownNat n)
@@ -304,6 +337,7 @@ infixr 8 <>
     -> BVar s (H.R m)
 (#>) = app
 infixr 8 #>
+{-# INLINE (#>) #-}
 
 (<.>)
     :: (Reifies s W, KnownNat n)
@@ -312,6 +346,7 @@ infixr 8 #>
     -> BVar s H.ℝ
 (<.>) = dot
 infixr 8 <.>
+{-# INLINE (<.>) #-}
 
 -- | Can only get the singular values, for now.  Let me know if you find an
 -- algorithm that can compute the gradients based on differentials for the
@@ -324,12 +359,39 @@ svd = liftOp1 . op1 $ \x ->
     in  ( σ
         , \dΣ -> u H.<> H.diagR 0 dΣ H.<> H.tr v
         )
+{-# INLINE svd #-}
+
+-- | Version of 'svd' that returns the full SVD, but if you attempt to find
+-- the gradient, it will fail at runtime if you ever use U or V.
+--
+-- Useful if you want to only use 'evalBP'.
+svd_
+    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    => BVar s (H.L m n)
+    -> (BVar s (H.L m m), BVar s (H.R n), BVar s (H.L n n))
+svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
+  where
+    o :: Op '[H.L m n] (T3 (H.L m m) (H.R n) (H.L n n))
+    o = op1 $ \x ->
+        let (u, σ, v) = H.svd x
+        in  ( T3 u σ v
+            , \(T3 dU dΣ dV) ->
+                    if H.norm_0 dU == 0 && H.norm_0 dV == 0
+                      then u H.<> H.diagR 0 dΣ H.<> H.tr v
+                      else error "svd_: Cannot backprop if U and V are used."
+            )
+    {-# INLINE o #-}
+    t = liftOp1 o r
+    {-# NOINLINE t #-}
+{-# INLINE svd_ #-}
 
 helpEigen :: KnownNat n => H.Sym n -> (H.R n, H.L n n, H.L n n, H.L n n)
 helpEigen x = (l, v, H.inv v, H.tr v)
   where
     (l, v) = H.eigensystem x
+{-# INLINE helpEigen #-}
 
+-- | TODO: check if gradient is really symmetric
 eigensystem
     :: forall n s. (Reifies s W, KnownNat n)
     => BVar s (H.Sym n)
@@ -344,13 +406,17 @@ eigensystem u = (t ^^. _1, t ^^. _2)
             Just lRep = H.withRows (replicate n l) H.exactDims
             fMat   = (1 - H.eye) * (lRep - H.tr lRep)
         in  ( T2 l v
-            , \(T2 dL dV) -> unsafeCoerce $         -- is this correct?
+            , \(T2 dL dV) -> unsafeCoerce $
                        H.tr vInv
                   H.<> (H.diag dL + fMat * (vTr H.<> dV))
                   H.<> vTr
             )
+    {-# INLINE o #-}
     t = liftOp1 o u
+    {-# NOINLINE t #-}
+{-# INLINE eigensystem #-}
 
+-- | TODO: check if gradient is really symmetric
 eigenvalues
     :: forall n s. (Reifies s W, KnownNat n)
     => BVar s (H.Sym n)
@@ -358,11 +424,14 @@ eigenvalues
 eigenvalues = liftOp1 . op1 $ \x ->
     let (l, _, vInv, vTr) = helpEigen x
     in  ( l
-        , \dL -> unsafeCoerce $         -- is this correct?
+        , \dL -> unsafeCoerce $
                  H.tr vInv H.<> H.diag dL H.<> vTr
         )
+{-# INLINE eigenvalues #-}
 
 -- | https://arxiv.org/abs/1602.07527
+--
+-- TODO: Check if gradient is really symmetric
 chol
     :: forall n s. (Reifies s W, KnownNat n)
     => BVar s (H.Sym n)
@@ -378,8 +447,9 @@ chol = liftOp1 . op1 $ \x ->
         -- TODO: imperative algorithm?
     in  ( l
         , \dL -> let s = H.tr lInv H.<> (phi * (H.tr l H.<> dL)) H.<> lInv
-                 in  unsafeCoerce $ s + H.tr s - H.eye * s  -- correct?
+                 in  unsafeCoerce $ s + H.tr s - H.eye * s
         )
+{-# INLINE chol #-}
 
 -- | number of non-zero items
 --
@@ -389,6 +459,7 @@ norm_0
     => BVar s a
     -> BVar s H.ℝ
 norm_0 = liftOp1 . op1 $ \x -> (H.norm_0 x, const 0)
+{-# INLINE norm_0 #-}
 
 -- | Sum of absolute values
 --
@@ -398,6 +469,7 @@ norm_1
     => BVar s a
     -> BVar s H.ℝ
 norm_1 = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
+{-# INLINE norm_1 #-}
 
 -- | Square root of sum of squares
 --
@@ -411,6 +483,7 @@ norm_2
 norm_2 = liftOp1 . op1 $ \x ->
     let n = H.norm_2 x
     in (n, \d -> x * H.konst (d / n))
+{-# INLINE norm_2 #-}
 
 -- | Maximum absolute value
 --
@@ -427,12 +500,14 @@ norm_Inf = liftOp1 . op1 $ \x ->
                                    else 0
     in  (n, \d -> fromJust . H.create . setD d . H.extract $ x)
 {-# ANN norm_Inf "HLint: ignore Use camelCase" #-}
+{-# INLINE norm_Inf #-}
 
 mean
     :: (Reifies s W, KnownNat n, 1 <= n)
     => BVar s (H.R n)
     -> BVar s H.ℝ
 mean = liftOp1 . op1 $ \x -> (H.mean x, H.konst . (/ H.norm_0 x))
+{-# INLINE mean #-}
 
 meanCov
     :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
@@ -443,11 +518,13 @@ meanCov v = (t ^^. _1, t ^^. _2)
     m = fromInteger $ natVal (Proxy @m)
     t = ($ v) . liftOp1 . op1 $ \x ->
         ( tupT2 (H.meanCov x)
-        , \(T2 dMean dCov) ->       -- TODO: replace with uncurryT2
+        , \(T2 dMean dCov) ->
               let Just gradMean = H.withColumns (replicate m dMean) H.exactDims
                   gradCov       = undefined dCov
               in  gradMean + gradCov
         )
+    {-# NOINLINE t #-}
+{-# INLINE meanCov #-}
 
 -- | 'meanCov', but if you know you won't use the covariance.
 meanL
@@ -460,6 +537,7 @@ meanL = liftOp1 . op1 $ \x ->
     )
   where
     m = fromInteger $ natVal (Proxy @m)
+{-# INLINE meanL #-}
 
 mul :: ( Reifies s W
        , KnownNat m
@@ -479,6 +557,7 @@ mul = liftOp2 . op2 $ \x y ->
     ( x `H.mul` y
     , \d -> (d `H.mul` H.tr y, H.tr x `H.mul` d)
     )
+{-# INLINE mul #-}
 
 app :: ( Reifies s W
        , KnownNat m
@@ -496,6 +575,7 @@ app = liftOp2 . op2 $ \xs y ->
     ( xs `H.app` y
     , \d -> (d `H.outer` y, H.tr xs `H.app` d)
     )
+{-# INLINE app #-}
 
 dot :: ( Reifies s W
        , KnownNat n
@@ -511,6 +591,7 @@ dot = liftOp2 . op2 $ \x y ->
     , \d -> let d' = H.konst d
             in  (d' * y, x * d')
     )
+{-# INLINE dot #-}
 
 cross
     :: ( Reifies s W
@@ -524,6 +605,7 @@ cross = liftOp2 . op2 $ \x y ->
     ( x `H.cross` y
     , \d -> (y `H.cross` d, d `H.cross` x)  -- is sign correct?
     )
+{-# INLINE cross #-}
 
 diagR
     :: forall m n k field vec mat s.
@@ -547,6 +629,7 @@ diagR = liftOp2 . op2 $ \c x ->
             , fromJust . H.create . HU.takeDiag . H.extract $ d
             )
     )
+{-# INLINE diagR #-}
 
 dvmap
     :: ( Reifies s W
@@ -563,6 +646,7 @@ dvmap f = liftOp1 . op1 $ \x ->
     in  ( fromJust (H.create y)
         , \d -> d * fromJust (H.create dx)
         )
+{-# INLINE dvmap #-}
 
 -- | A version of 'dvmap' that is less performant but is based on
 -- 'H.zipWithVector' from 'H.Domain'.
@@ -580,6 +664,7 @@ dvmap' f = liftOp1 . op1 $ \x ->
     ( H.dvmap (evalBP f) x
     , (H.dvmap (gradBP f) x *)
     )
+{-# INLINE dvmap' #-}
 
 dmmap
     :: forall n m mat field s.
@@ -604,6 +689,7 @@ dmmap f = liftOp1 . op1 $ \x ->
   where
     m :: Int
     m = fromInteger $ natVal (Proxy @m)
+{-# INLINE dmmap #-}
 
 dmmap'
     :: ( Reifies s W
@@ -620,6 +706,7 @@ dmmap' f = liftOp1 . op1 $ \x ->
     ( H.dmmap (evalBP f) x
     , (H.dmmap (gradBP f) x *)
     )
+{-# INLINE dmmap' #-}
 
 outer
     :: ( Reifies s W
@@ -639,6 +726,7 @@ outer = liftOp2 . op2 $ \x y ->
     , \d -> ( d `H.app` y
             , H.tr d `H.app` x)
     )
+{-# INLINE outer #-}
 
 zipWithVector
     :: ( Reifies s W
@@ -660,6 +748,7 @@ zipWithVector f = liftOp2 . op2 $ \(H.extract->x) (H.extract->y) ->
     in  ( fromJust (H.create z)
         , \d -> (d * fromJust (H.create dx), d * fromJust (H.create dy))
         )
+{-# INLINE zipWithVector #-}
 
 -- | A version of 'zipWithVector' that is less performant but is based on
 -- 'H.zipWithVector' from 'H.Domain'.
@@ -680,6 +769,7 @@ zipWithVector' f = liftOp2 . op2 $ \x y ->
                 dy = H.zipWithVector (\x' -> snd . gradBP2 f x') x y
             in  (d * dx, d * dy)
     )
+{-# INLINE zipWithVector' #-}
 
 det :: ( Reifies s W
        , KnownNat n
@@ -694,6 +784,7 @@ det = liftOp1 . op1 $ \x ->
     let xDet = H.det x
         xInv = H.inv x
     in  ( xDet, \d -> H.konst (d * xDet) * H.tr xInv )
+{-# INLINE det #-}
 
 invlndet
     :: forall n mat field vec d s.
@@ -717,7 +808,10 @@ invlndet v = (t ^^. _1, (t ^^. _2, t ^^. _3))
                     gradLDet = H.konst dLDet * H.tr i
                 in  gradI + gradLDet
           )
+    {-# INLINE o #-}
     t = liftOp1 o v
+    {-# NOINLINE t #-}
+{-# INLINE invlndet #-}
 
 lndet
     :: forall n mat field vec d s.
@@ -733,6 +827,7 @@ lndet
 lndet = liftOp1 . op1 $ \x ->
           let (i,(ldet,_)) = H.invlndet x
           in  (ldet, (* H.tr i) . H.konst)
+{-# INLINE lndet #-}
 
 -- TODO: expm ???
 -- https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
@@ -750,45 +845,54 @@ inv :: ( Reifies s W
 inv = liftOp1 . op1 $ \x ->
     let xInv = H.inv x
     in  ( xInv, \d -> -d * (xInv `H.mul` xInv) )
+{-# INLINE inv #-}
 
 -- TODO: withRows/withCols ??
 -- Is it possible or meaningful?
 
 rowsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector m (H.R n)
 rowsV = fromJust . SV.fromList . H.toRows
+{-# INLINE rowsV #-}
 
 colsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector n (H.R m)
 colsV = fromJust . SV.fromList . H.toColumns
+{-# INLINE colsV #-}
 
 vRows :: (KnownNat m, KnownNat n) => SV.Vector m (H.R n) -> H.L m n
 vRows = (`H.withRows` fromJust . H.exactDims) . SV.toList
+{-# INLINE vRows #-}
 
 vCols :: (KnownNat m, KnownNat n) => SV.Vector n (H.R m) -> H.L m n
 vCols = (`H.withColumns` fromJust . H.exactDims) . SV.toList
+{-# INLINE vCols #-}
 
 toRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
 toRows = sequenceVar . liftOp1 (opIso rowsV vRows)
+{-# INLINE toRows #-}
 
 toColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
 toColumns = sequenceVar . liftOp1 (opIso colsV vCols)
+{-# INLINE toColumns #-}
 
 fromRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
 fromRows = liftOp1 (opIso vRows rowsV) . collectVar
+{-# INLINE fromRows #-}
 
 fromColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
 fromColumns = liftOp1 (opIso vRows rowsV) . collectVar
+{-# INLINE fromColumns #-}
 
 takeDiag
     :: ( Reifies s W
@@ -805,6 +909,7 @@ takeDiag = liftOp1 . op1 $ \x ->
     ( H.takeDiag x
     , H.diagR 0
     )
+{-# INLINE takeDiag #-}
 
 sym :: (Reifies s W, KnownNat n)
     => BVar s (H.Sq n)
@@ -813,6 +918,7 @@ sym = liftOp1 . op1 $ \x ->
     ( H.sym x
     , H.unSym . H.sym . H.unSym
     )
+{-# INLINE sym #-}
 
 mTm :: (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
@@ -821,11 +927,15 @@ mTm = liftOp1 . op1 $ \x ->
     ( H.mTm x
     , \d -> 2 * (x H.<> H.unSym d)
     )
+{-# INLINE mTm #-}
 
--- TODO: unSym ??? not possible?  the gradient function would be a lie,
--- potentially.
---
--- But, does that matter?
+-- | TODO: Decide if it makes sense if gradient is not symmetric.
+unSym
+    :: (Reifies s W, KnownNat n)
+    => BVar s (H.Sym n)
+    -> BVar s (H.Sq n)
+unSym = liftOp1 (opIso H.unSym unsafeCoerce)
+{-# INLINE unSym #-}
 
 (<·>)
     :: (Reifies s W, KnownNat n)
@@ -834,4 +944,4 @@ mTm = liftOp1 . op1 $ \x ->
     -> BVar s H.ℝ
 (<·>) = dot
 infixr 8 <·>
-
+{-# INLINE (<·>) #-}

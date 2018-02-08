@@ -22,7 +22,7 @@ description:         Please see the README on Github at <https://github.com/mstk
 dependencies:
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
-- backprop >= 0.1.1
+- backprop >= 0.1.2
 - ghc-typelits-natnormalise
 - ghc-typelits-knownnat
 - microlens
