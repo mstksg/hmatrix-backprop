@@ -51,6 +51,7 @@
 --     * https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
 --     * http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf
 --     * http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf
+--     * https://arxiv.org/abs/1602.07527
 --
 -- Some functions are notably unlifted:
 --
@@ -60,18 +61,26 @@
 --     that exports only the singular values is exported.  'svd_' works for
 --     'evalBP' but not 'gradBP'.
 --     * 'H.svdTall', 'H.svdFlat': Not sure where to start for these
---     * 'qr': Same story
+--     * 'qr': Same story.
+--     https://github.com/tensorflow/tensorflow/issues/6504 might yield
+--     a clue?
 --     * 'H.her': No 'Num' instance for 'H.Her' makes this impossible at
 --     the moment with the current backprop API
 --     * 'H.exmp': Definitely possible, but I haven't dug deep enough to
---     figure it out yet!  Feel free to sbumit a PR!
---     * 'H.sqrt': Also likely possible, but I have not found a good
---     reference for this yet.
+--     figure it out yet!  There is a description here
+--     https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf but it
+--     requires some things I am not familiar with yet.  Feel free to
+--     submit a PR!
+--     * 'H.sqrtm': Also likely possible.  Maybe try to translate
+--     http://people.cs.umass.edu/~smaji/projects/matrix-sqrt/ ?  PRs
+--     welcomed!
 --     * 'H.linSolve': Haven't figured out where to start!
 --     * 'H.</>': Same story
 --     * Functions returning existential types, like 'H.withNullSpace',
 --     'H.withOrth', 'H.withRows', etc.; not quite sure what the best way
 --     to handle these are at the moment.
+--     * 'H.withRows' and 'H.withColumns' made "type-safe", without
+--     existential types, with 'fromRows' and 'fromColumns'.
 
 module Numeric.LinearAlgebra.Static.Backprop (
   -- * Vector
@@ -394,7 +403,7 @@ matrix vs = case SV.fromList @(m * n) vs of
     n = fromInteger $ natVal (Proxy @n)
 {-# INLINE matrix #-}
 
-
+-- | Matrix product
 (<>)
     :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n)
     => BVar s (H.L m k)
@@ -404,6 +413,7 @@ matrix vs = case SV.fromList @(m * n) vs of
 infixr 8 <>
 {-# INLINE (<>) #-}
 
+-- | Matrix-vector product
 (#>)
     :: (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
@@ -413,6 +423,7 @@ infixr 8 <>
 infixr 8 #>
 {-# INLINE (#>) #-}
 
+-- | Dot product
 (<.>)
     :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
@@ -503,7 +514,10 @@ eigenvalues = liftOp1 . op1 $ \x ->
         )
 {-# INLINE eigenvalues #-}
 
--- | https://arxiv.org/abs/1602.07527
+-- | Algorithm from https://arxiv.org/abs/1602.07527
+--
+-- The paper also suggests a potential imperative algorithm that might
+-- help.  Need to benchmark to see what is best.
 --
 -- TODO: Check if gradient is really symmetric
 chol
@@ -518,7 +532,6 @@ chol = liftOp1 . op1 $ \x ->
                                   LT -> 1
                                   EQ -> 0.5
                                   GT -> 0
-        -- TODO: imperative algorithm?
     in  ( l
         , \dL -> let s = H.tr lInv H.<> (phi * (H.tr l H.<> dL)) H.<> lInv
                  in  unsafeCoerce $ s + H.tr s - H.eye * s
@@ -541,7 +554,7 @@ norm_1V
 norm_1V = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
 {-# INLINE norm_1V #-}
 
--- | Maximum norm_1 of columns
+-- | Maximum 'H.norm_1' of columns
 norm_1M
     :: (Reifies s W, KnownNat n, KnownNat m)
     => BVar s (H.L n m)
@@ -598,7 +611,7 @@ norm_InfV = liftOp1 . op1 $ \x ->
 {-# ANN norm_InfV "HLint: ignore Use camelCase" #-}
 {-# INLINE norm_InfV #-}
 
--- | Maximum norm_1 of rows
+-- | Maximum 'H.norm_1' of rows
 norm_InfM
     :: (Reifies s W, KnownNat n, KnownNat m)
     => BVar s (H.L n m)
@@ -625,6 +638,8 @@ mean
 mean = liftOp1 . op1 $ \x -> (H.mean x, H.konst . (/ H.norm_0 x))
 {-# INLINE mean #-}
 
+-- | Mean and covariance.  If you know you won't use the covariance, it is
+-- best to use 'meanL'.
 meanCov
     :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
     => BVar s (H.L m n)
@@ -723,6 +738,7 @@ cross = liftOp2 . op2 $ \x y ->
     )
 {-# INLINE cross #-}
 
+-- | Create matrix with diagonal, and fill with default entries
 diagR
     :: forall m n k field vec mat s.
       ( Reifies s W
@@ -902,6 +918,8 @@ det = liftOp1 . op1 $ \x ->
     in  ( xDet, \d -> H.konst (d * xDet) * H.tr xInv )
 {-# INLINE det #-}
 
+-- | The inverse and the natural log of the determinant together.  If you
+-- know you don't need the inverse, it is best to use 'lndet'.
 invlndet
     :: forall n mat field vec d s.
        ( Reifies s W
@@ -929,6 +947,7 @@ invlndet v = (t ^^. _1, (t ^^. _2, t ^^. _3))
     {-# NOINLINE t #-}
 {-# INLINE invlndet #-}
 
+-- | The natural log of the determinant.
 lndet
     :: forall n mat field vec d s.
        ( Reifies s W
@@ -945,12 +964,6 @@ lndet = liftOp1 . op1 $ \x ->
           in  (ldet, (* H.tr i) . H.konst)
 {-# INLINE lndet #-}
 
--- TODO: expm ???
--- https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
-
--- TODO: sqrtm ???
--- http://people.cs.umass.edu/~smaji/projects/matrix-sqrt/
-
 inv :: ( Reifies s W
        , KnownNat n
        , Num (mat n n)
@@ -962,9 +975,6 @@ inv = liftOp1 . op1 $ \x ->
     let xInv = H.inv x
     in  ( xInv, \d -> -d * (xInv `H.mul` xInv) )
 {-# INLINE inv #-}
-
--- TODO: withRows/withCols ??
--- Is it possible or meaningful?
 
 rowsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector m (H.R n)
 rowsV = fromJust . SV.fromList . H.toRows
@@ -1102,10 +1112,6 @@ create
 create = fmap (getMayb . sequenceVar) . liftOp1 $
     opIso (Mayb              . H.create)
           (maybe 0 H.extract . getMayb )
--- op1 $ \x ->
---     ( Mayb . H.create $ x
---     , maybe 0 H.extract . getMayb
---     )
 {-# INLINE create #-}
 
 
@@ -1126,6 +1132,7 @@ takeDiag = liftOp1 . op1 $ \x ->
     )
 {-# INLINE takeDiag #-}
 
+-- | $(M + M^T) / 2$
 sym :: (Reifies s W, KnownNat n)
     => BVar s (H.Sq n)
     -> BVar s (H.Sym n)
@@ -1135,6 +1142,7 @@ sym = liftOp1 . op1 $ \x ->
     )
 {-# INLINE sym #-}
 
+-- | $M^T M$
 mTm :: (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> BVar s (H.Sym n)
@@ -1144,7 +1152,7 @@ mTm = liftOp1 . op1 $ \x ->
     )
 {-# INLINE mTm #-}
 
--- | Warning: the gradient is going to not be symmetric, and so is /not/
+-- | Warning: the gradient is going necessarily symmetric, and so is /not/
 -- meant to be used directly.  Rather, it is meant to be used in the middle
 -- (or at the end) of a longer computation.
 unSym
@@ -1154,6 +1162,7 @@ unSym
 unSym = liftOp1 (opIso H.unSym unsafeCoerce)
 {-# INLINE unSym #-}
 
+-- | Unicode synonym for '<.>>'
 (<·>)
     :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
