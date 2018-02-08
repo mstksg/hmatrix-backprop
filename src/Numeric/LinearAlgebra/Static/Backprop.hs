@@ -1,6 +1,10 @@
 {-# LANGUAGE DataKinds                                #-}
+{-# LANGUAGE DeriveFoldable                           #-}
+{-# LANGUAGE DeriveFunctor                            #-}
+{-# LANGUAGE DeriveTraversable                        #-}
 {-# LANGUAGE FlexibleContexts                         #-}
 {-# LANGUAGE GADTs                                    #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving               #-}
 {-# LANGUAGE PolyKinds                                #-}
 {-# LANGUAGE RankNTypes                               #-}
 {-# LANGUAGE ScopedTypeVariables                      #-}
@@ -10,13 +14,67 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
--- | https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
+-- |
+-- Module      : Numeric.LinearAlgebra.Static.Backprop
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
 --
--- http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
 --
--- http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf
+-- A wrapper over "Numeric.LinearAlgebra.Static" (type-safe vector and
+-- matrix operations based on blas/lapack) that allows its operations to
+-- work with <https://hackage.haskell.org/package/backprop backprop>.
+--
+-- In short, these functions are "lifted" to work with 'BVar's.
+--
+-- Using 'evalBP' will run the original operation:
+--
+-- @
+-- 'evalBP' :: (forall s. 'Reifies' s 'W'. 'BVar' s a -> 'BVar' s b) -> a -> b
+-- @
+--
+-- But using 'gradBP' or 'backprop' will give you the gradient:
+--
+-- @
+-- 'gradBP' :: (forall s. 'Reifies' s 'W'. 'BVar' s a -> 'BVar' s b) -> a -> a
+-- @
+--
+-- These can act as a drop-in replacement to the API of
+-- "Numeric.LinearAlgebra.Static".  Just change your imports, and your
+-- functions are automatically backpropagatable.  Useful types are all
+-- re-exported.
+--
+-- Formulas for gradients come from the following papers:
+--
+--     * https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
+--     * http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf
+--     * http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf
+--
+-- Some functions are notably unlifted:
+--
+--     * 'svd': I can't find any resources that allow you to backpropagate
+--     if the U and V matrices are used!  If you find one, let me know, or
+--     feel free to submit a PR!  Because of this, Currently only a version
+--     that exports only the singular values is exported.  'svd_' works for
+--     'evalBP' but not 'gradBP'.
+--     * 'H.svdTall', 'H.svdFlat': Not sure where to start for these
+--     * 'qr': Same story
+--     * 'H.her': No 'Num' instance for 'H.Her' makes this impossible at
+--     the moment with the current backprop API
+--     * 'H.exmp': Definitely possible, but I haven't dug deep enough to
+--     figure it out yet!  Feel free to sbumit a PR!
+--     * 'H.sqrt': Also likely possible, but I have not found a good
+--     reference for this yet.
+--     * 'H.linSolve': Haven't figured out where to start!
+--     * 'H.</>': Same story
+--     * Functions returning existential types, like 'H.withNullSpace',
+--     'H.withOrth', 'H.withRows', etc.; not quite sure what the best way
+--     to handle these are at the moment.
 
 module Numeric.LinearAlgebra.Static.Backprop (
+  -- * Vector
     H.R
   , H.ℝ
   , vec2
@@ -30,6 +88,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , linspace
   , H.range
   , H.dim
+  -- * Matrix
   , H.L
   , H.Sq
   , row
@@ -44,27 +103,37 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , H.eye
   , diag
   , matrix
+  -- * Complex
   , H.ℂ
   , H.C
   , H.M
   , H.𝑖
+  -- * Products
   , (<>)
   , (#>)
   , (<.>)
+  -- * Factorizations
   , svd
   , svd_
   , H.Eigen
   , eigensystem
   , eigenvalues
   , chol
+  -- * Norms
   , H.Normed
   , norm_0
-  , norm_1
-  , norm_2
-  , norm_Inf
+  , norm_1V
+  , norm_1M
+  , norm_2V
+  , norm_2M
+  , norm_InfV
+  , norm_InfM
+  -- * Misc
   , mean
   , meanCov
   , meanL
+  , H.Disp(..)
+  -- ** Domain
   , H.Domain
   , mul
   , app
@@ -82,10 +151,17 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , invlndet
   , lndet
   , inv
+  -- ** Conversions
   , toRows
   , toColumns
   , fromRows
   , fromColumns
+  -- ** Misc Operations
+  , konst
+  , extractV
+  , extractM
+  , create
+  , H.Diag
   , takeDiag
   , H.Sym
   , sym
@@ -94,6 +170,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , (<·>)
   ) where
 
+import           Control.Applicative
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
@@ -318,9 +395,6 @@ matrix vs = case SV.fromList @(m * n) vs of
 {-# INLINE matrix #-}
 
 
--- TODO: her??
--- cannot: no Num instance for Her
-
 (<>)
     :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n)
     => BVar s (H.L m k)
@@ -451,9 +525,7 @@ chol = liftOp1 . op1 $ \x ->
         )
 {-# INLINE chol #-}
 
--- | number of non-zero items
---
--- not really well defined?
+-- | Number of non-zero items
 norm_0
     :: (Reifies s W, H.Normed a, Num a)
     => BVar s a
@@ -462,45 +534,89 @@ norm_0 = liftOp1 . op1 $ \x -> (H.norm_0 x, const 0)
 {-# INLINE norm_0 #-}
 
 -- | Sum of absolute values
---
--- Does this work for matricies?
-norm_1
-    :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d)
-    => BVar s a
+norm_1V
+    :: (Reifies s W, KnownNat n)
+    => BVar s (H.R n)
     -> BVar s H.ℝ
-norm_1 = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
-{-# INLINE norm_1 #-}
+norm_1V = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
+{-# INLINE norm_1V #-}
+
+-- | Maximum norm_1 of columns
+norm_1M
+    :: (Reifies s W, KnownNat n, KnownNat m)
+    => BVar s (H.L n m)
+    -> BVar s H.ℝ
+norm_1M = liftOp1 . op1 $ \x ->
+    let n = H.norm_1 x
+    in  (n, \d -> let d' = H.konst d
+                  in  fromJust
+                    . (`H.withColumns` H.exactDims)
+                    . map (\c -> if H.norm_1 c == n
+                                   then d' * signum c
+                                   else 0
+                          )
+                    . H.toColumns
+                    $ x
+        )
+{-# INLINE norm_1M #-}
 
 -- | Square root of sum of squares
 --
 -- Be aware that gradient diverges when the norm is zero
---
--- Does this work for matricies?
-norm_2
-    :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d)
-    => BVar s a
+norm_2V
+    :: (Reifies s W, KnownNat n)
+    => BVar s (H.R n)
     -> BVar s H.ℝ
-norm_2 = liftOp1 . op1 $ \x ->
+norm_2V = liftOp1 . op1 $ \x ->
     let n = H.norm_2 x
     in (n, \d -> x * H.konst (d / n))
-{-# INLINE norm_2 #-}
+{-# INLINE norm_2V #-}
+
+-- | Maximum singular value
+norm_2M
+    :: (Reifies s W, KnownNat n, KnownNat m)
+    => BVar s (H.L n m)
+    -> BVar s H.ℝ
+norm_2M = liftOp1 . op1 $ \x ->
+    let n = H.norm_2 x
+        (head.H.toColumns->u1,_,head.H.toColumns->v1) = H.svd x
+    in (n, \d -> H.konst d * (u1 `H.outer` v1))
+{-# INLINE norm_2M #-}
 
 -- | Maximum absolute value
---
--- Does this work for matricies?
-norm_Inf
-    :: (Reifies s W, H.Normed a, Num a, H.Sized H.ℝ a d, HU.Container d H.ℝ)
-    => BVar s a
+norm_InfV
+    :: (Reifies s W, KnownNat n)
+    => BVar s (H.R n)
     -> BVar s H.ℝ
-norm_Inf = liftOp1 . op1 $ \x ->
+norm_InfV = liftOp1 . op1 $ \x ->
     let n :: H.ℝ
         n = H.norm_Inf x
         setD d = HU.cmap $ \e -> if abs e == n
                                    then signum e * d
                                    else 0
     in  (n, \d -> fromJust . H.create . setD d . H.extract $ x)
-{-# ANN norm_Inf "HLint: ignore Use camelCase" #-}
-{-# INLINE norm_Inf #-}
+{-# ANN norm_InfV "HLint: ignore Use camelCase" #-}
+{-# INLINE norm_InfV #-}
+
+-- | Maximum norm_1 of rows
+norm_InfM
+    :: (Reifies s W, KnownNat n, KnownNat m)
+    => BVar s (H.L n m)
+    -> BVar s H.ℝ
+norm_InfM = liftOp1 . op1 $ \x ->
+    let n = H.norm_1 x
+    in  (n, \d -> let d' = H.konst d
+                  in  fromJust
+                    . (`H.withRows` H.exactDims)
+                    . map (\c -> if H.norm_1 c == n
+                                   then d' * signum c
+                                   else 0
+                          )
+                    . H.toRows
+                    $ x
+        )
+{-# ANN norm_InfM "HLint: ignore Use camelCase" #-}
+{-# INLINE norm_InfM #-}
 
 mean
     :: (Reifies s W, KnownNat n, 1 <= n)
@@ -894,6 +1010,105 @@ fromColumns
 fromColumns = liftOp1 (opIso vRows rowsV) . collectVar
 {-# INLINE fromColumns #-}
 
+konst
+    :: (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
+    => BVar q t
+    -> BVar q s
+konst = liftOp1 . op1 $ \x ->
+    ( H.konst x
+    , HU.sumElements . H.extract
+    )
+{-# INLINE konst #-}
+
+-- | Only needed until https://github.com/DanBurton/ANum/pull/1 goes
+-- through
+newtype Mayb a = Mayb { getMayb :: Maybe a }
+    deriving (Functor, Applicative, Foldable, Traversable)
+
+instance Num a => Num (Mayb a) where
+    (+)         = liftA2 (+)
+    (-)         = liftA2 (-)
+    (*)         = liftA2 (*)
+    negate      = fmap negate
+    abs         = fmap abs
+    signum      = fmap signum
+    fromInteger = pure . fromInteger
+
+-- | If there are extra items in the total derivative, they are dropped.
+-- If there are missing items, they are treated as zero.
+extractV
+    :: ( Reifies q W
+       , H.Sized t s HU.Vector
+       , Num s
+       , HU.Konst t Int HU.Vector
+       , HU.Container HU.Vector t
+       , Num (HU.Vector t)
+       )
+    => BVar q s
+    -> BVar q (HU.Vector t)
+extractV = liftOp1 . op1 $ \x ->
+    let n = H.size x
+    in  ( H.extract x
+        , \d -> let m  = HU.size d
+                    m' = case compare n m of
+                            LT -> HU.subVector 0 n d
+                            EQ -> d
+                            GT -> HU.vjoin [d, HU.konst 0 (n - m)]
+                in  fromJust . H.create $ m'
+        )
+{-# INLINE extractV #-}
+
+-- | If there are extra items in the total derivative, they are dropped.
+-- If there are missing items, they are treated as zero.
+extractM
+    :: ( Reifies q W
+       , H.Sized t s HU.Matrix
+       , Num s
+       , HU.Konst t (Int, Int) HU.Matrix
+       , HU.Container HU.Matrix t
+       , Num (HU.Matrix t)
+       )
+    => BVar q s
+    -> BVar q (HU.Matrix t)
+extractM = liftOp1 . op1 $ \x ->
+    let (xI,xJ) = H.size x
+    in  ( H.extract x
+        , \d -> let (dI,dJ) = HU.size d
+                    m' = case (compare xI dI, compare xJ dJ) of
+                           (LT, LT) -> d HU.?? (HU.Take xI, HU.Take xJ)
+                           (LT, EQ) -> d HU.?? (HU.Take xI, HU.All)
+                           (LT, GT) -> d HU.?? (HU.Take xI, HU.All)
+                                HU.||| HU.konst 0 (xI, xJ - dJ)
+                           (EQ, LT) -> d HU.?? (HU.All    , HU.Take xJ)
+                           (EQ, EQ) -> d
+                           (EQ, GT) -> d HU.?? (HU.All, HU.All)
+                                HU.||| HU.konst 0 (xI, xJ - dJ)
+                           (GT, LT) -> d HU.?? (HU.All, HU.Take xJ)
+                                HU.=== HU.konst 0 (xI - dI, xJ)
+                           (GT, EQ) -> d HU.?? (HU.All, HU.All)
+                                HU.=== HU.konst 0 (xI - dI, xJ)
+                           (GT, GT) -> HU.fromBlocks
+                              [[d,0                            ]
+                              ,[0,HU.konst 0 (xI - dI, xJ - dJ)]
+                              ]
+                in  fromJust . H.create $ m'
+        )
+{-# INLINE extractM #-}
+
+create
+    :: (Reifies q W, H.Sized t s d, Num s, Num (d t))
+    => BVar q (d t)
+    -> Maybe (BVar q s)
+create = fmap (getMayb . sequenceVar) . liftOp1 $
+    opIso (Mayb              . H.create)
+          (maybe 0 H.extract . getMayb )
+-- op1 $ \x ->
+--     ( Mayb . H.create $ x
+--     , maybe 0 H.extract . getMayb
+--     )
+{-# INLINE create #-}
+
+
 takeDiag
     :: ( Reifies s W
        , KnownNat n
@@ -929,7 +1144,9 @@ mTm = liftOp1 . op1 $ \x ->
     )
 {-# INLINE mTm #-}
 
--- | TODO: Decide if it makes sense if gradient is not symmetric.
+-- | Warning: the gradient is going to not be symmetric, and so is /not/
+-- meant to be used directly.  Rather, it is meant to be used in the middle
+-- (or at the end) of a longer computation.
 unSym
     :: (Reifies s W, KnownNat n)
     => BVar s (H.Sym n)

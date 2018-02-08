@@ -19,16 +19,6 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         Please see the README on Github at <https://github.com/mstksg/hmatrix-backprop#readme>
 
-dependencies:
-- base >= 4.7 && < 5
-- hmatrix >= 0.18
-- backprop >= 0.1.2
-- ghc-typelits-natnormalise
-- ghc-typelits-knownnat
-- microlens
-- vector
-- vector-sized
-
 ghc-options:
 - -Wall
 - -fwarn-redundant-constraints
@@ -37,6 +27,15 @@ library:
   source-dirs: src
   exposed-modules:
   - Numeric.LinearAlgebra.Static.Backprop
+  dependencies:
+  - base >= 4.7 && < 5
+  - hmatrix >= 0.18
+  - backprop >= 0.1.2
+  - ghc-typelits-natnormalise
+  - ghc-typelits-knownnat
+  - microlens
+  - vector
+  - vector-sized
 
 # tests:
 #   hmatrix-backprop-test:
