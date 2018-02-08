@@ -9,6 +9,10 @@
 
 
 -- | <a>https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf</a>
+--   
+--   <a>http://www.dtic.mil/dtic/tr/fulltext/u2/624426.pdf</a>
+--   
+--   <a>http://www.cs.cmu.edu/~zkolter/course/15-884/linalg-review.pdf</a>
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
 type ℝ = Double
@@ -48,7 +52,6 @@ matrix :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => [BVar s ℝ] ->
 type ℂ = Complex Double
 data C (n :: Nat) :: Nat -> *
 data M (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
-data Her (n :: Nat) :: Nat -> *
 𝑖 :: Sized ℂ s c => s
 (<>) :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n) => BVar s (L m k) -> BVar s (L k n) -> BVar s (L m n)
 infixr 8 <>
@@ -61,11 +64,23 @@ infixr 8 <.>
 --   algorithm that can compute the gradients based on differentials for
 --   the other matricies!
 svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n)
+
+-- | Version of <a>svd</a> that returns the full SVD, but if you attempt to
+--   find the gradient, it will fail at runtime if you ever use U or V.
+--   
+--   Useful if you want to only use <a>evalBP</a>.
+svd_ :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> (BVar s (L m m), BVar s (R n), BVar s (L n n))
 class Eigen m l v | m -> l, m -> v
+
+-- | TODO: check if gradient is really symmetric
 eigensystem :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> (BVar s (R n), BVar s (L n n))
+
+-- | TODO: check if gradient is really symmetric
 eigenvalues :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (R n)
 
 -- | <a>https://arxiv.org/abs/1602.07527</a>
+--   
+--   TODO: Check if gradient is really symmetric
 chol :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 
 -- | p-norm for vectors, operator norm for matrices
@@ -128,5 +143,8 @@ takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec m
 data Sym (n :: Nat) :: Nat -> *
 sym :: (Reifies s W, KnownNat n) => BVar s (Sq n) -> BVar s (Sym n)
 mTm :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (Sym n)
+
+-- | TODO: Decide if it makes sense if gradient is not symmetric.
+unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 (<·>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <·>
