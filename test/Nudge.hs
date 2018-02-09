@@ -29,10 +29,10 @@ import qualified Numeric.LinearAlgebra.Static          as H
 import qualified Numeric.LinearAlgebra.Static.Backprop as B
 
 nudge :: Double
-nudge = 1e-4
+nudge = 1e-6
 
 eps :: Double
-eps = 1e-9
+eps = 1e-8
 
 class Testing c where
     type TIx c :: Type

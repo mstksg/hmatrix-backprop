@@ -963,9 +963,10 @@ invlndet v = (t ^^. _1, (t ^^. _2, t ^^. _3))
     o :: Op '[mat n n] (T3 (mat n n) field field)
     o = op1 $ \x ->
       let (i,(ldet, s)) = H.invlndet x
+          iTr           = H.tr i
       in  ( T3 i ldet s
           , \(T3 dI dLDet _) ->
-                let gradI    = -dI * (i `H.mul` i)
+                let gradI    = - iTr `H.mul` dI `H.mul` iTr
                     gradLDet = H.konst dLDet * H.tr i
                 in  gradI + gradLDet
           )
@@ -995,12 +996,14 @@ inv :: ( Reifies s W
        , KnownNat n
        , Num (mat n n)
        , H.Domain field vec mat
+       , HU.Transposable (mat n n) (mat n n)
        )
     => BVar s (mat n n)
     -> BVar s (mat n n)
 inv = liftOp1 . op1 $ \x ->
-    let xInv = H.inv x
-    in  ( xInv, \d -> -d * (xInv `H.mul` xInv) )
+    let xInv   = H.inv x
+        xInvTr = H.tr xInv
+    in  ( xInv, \d -> - xInvTr `H.mul` d `H.mul` xInvTr )
 {-# INLINE inv #-}
 
 rowsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector m (H.R n)

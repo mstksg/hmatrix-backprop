@@ -237,17 +237,19 @@ prop_mTm = nudgeProp (genMat @5 @4) (B.unSym . B.mTm)
 prop_unSym :: Property
 prop_unSym = nudgeProp (genMat @5 @5) (B.unSym . B.sym)
 
-tryGroup :: Group -> Group
-tryGroup Group{..} =
+tryGroup :: (forall a. Num a => a) -> Group -> Group
+tryGroup n Group{..} =
     Group groupName
-          ((map . second) (withTests 250) groupProperties)
+          ((map . second) (withDiscards n . withTests n)
+                          groupProperties
+          )
 
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
 
-  results <- checkParallel (tryGroup $$(discover))
+  results <- checkParallel (tryGroup 250 $$(discover))
 
   unless results exitFailure
 
