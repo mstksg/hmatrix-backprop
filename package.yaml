@@ -21,29 +21,33 @@ description:         Please see the README on Github at <https://github.com/mstk
 
 ghc-options:
 - -Wall
-- -fwarn-redundant-constraints
+
+dependencies:
+- base >= 4.7 && < 5
+- hmatrix >= 0.18.1
+- backprop >= 0.1.2
+- ghc-typelits-natnormalise
+- ghc-typelits-knownnat
+- microlens
+- vector
+- vector-sized
 
 library:
   source-dirs: src
   exposed-modules:
   - Numeric.LinearAlgebra.Static.Backprop
-  dependencies:
-  - base >= 4.7 && < 5
-  - hmatrix >= 0.18.1
-  - backprop >= 0.1.2
-  - ghc-typelits-natnormalise
-  - ghc-typelits-knownnat
-  - microlens
-  - vector
-  - vector-sized
+  ghc-options:
+  - -fwarn-redundant-constraints
 
-# tests:
-#   hmatrix-backprop-test:
-#     main:                Spec.hs
-#     source-dirs:         test
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - hmatrix-backprop
+tests:
+  hmatrix-backprop-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hmatrix-backprop
+    - hedgehog
+    - microlens-platform

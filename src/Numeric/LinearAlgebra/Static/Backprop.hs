@@ -141,6 +141,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , mean
   , meanCov
   , meanL
+  , cov
   , H.Disp(..)
   -- ** Domain
   , H.Domain
@@ -253,7 +254,7 @@ infixl 4 #
 {-# INLINE (#) #-}
 
 split
-    :: (Reifies s W, KnownNat p, KnownNat n, p <= n)
+    :: forall p n s. (Reifies s W, KnownNat p, KnownNat n, p <= n)
     => BVar s (H.R n)
     -> (BVar s (H.R p), BVar s (H.R (n - p)))
 split v = (t ^^. _1, t ^^. _2)      -- should we just return the T2 ?
@@ -337,7 +338,7 @@ infixl 2 ===
 {-# INLINE (===) #-}
 
 splitRows
-    :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m)
+    :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m)
     => BVar s (H.L m n)
     -> (BVar s (H.L p n), BVar s (H.L (m - p) n))
 splitRows v = (t ^^. _1, t ^^. _2)
@@ -349,7 +350,7 @@ splitRows v = (t ^^. _1, t ^^. _2)
 {-# INLINE splitRows #-}
 
 splitCols
-    :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n)
+    :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n)
     => BVar s (H.L m n)
     -> (BVar s (H.L m p), BVar s (H.L m (n - p)))
 splitCols v = (t ^^. _1, t ^^. _2)
@@ -436,6 +437,8 @@ infixr 8 <.>
 -- | Can only get the singular values, for now.  Let me know if you find an
 -- algorithm that can compute the gradients based on differentials for the
 -- other matricies!
+--
+-- TODO: bug in diagR
 svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> BVar s (H.R n)
@@ -638,8 +641,8 @@ mean
 mean = liftOp1 . op1 $ \x -> (H.mean x, H.konst . (/ H.norm_0 x))
 {-# INLINE mean #-}
 
--- | Mean and covariance.  If you know you won't use the covariance, it is
--- best to use 'meanL'.
+-- | Mean and covariance.  If you know you only want to use one or the
+-- other, use 'meanL' or 'cov'.
 meanCov
     :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
     => BVar s (H.L m n)
@@ -669,6 +672,20 @@ meanL = liftOp1 . op1 $ \x ->
   where
     m = fromInteger $ natVal (Proxy @m)
 {-# INLINE meanL #-}
+
+-- | 'cov', but if you know you won't use the covariance.
+cov
+    :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
+    => BVar s (H.L m n)
+    -> BVar s (H.Sym n)
+cov = liftOp1 . op1 $ \x ->
+    ( snd (H.meanCov x)
+    , undefined
+    )
+  -- where
+  --   m = fromInteger $ natVal (Proxy @m)
+{-# INLINE cov #-}
+
 
 mul :: ( Reifies s W
        , KnownNat m
@@ -1021,7 +1038,7 @@ fromColumns = liftOp1 (opIso vRows rowsV) . collectVar
 {-# INLINE fromColumns #-}
 
 konst
-    :: (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
+    :: forall t s d q. (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
     => BVar q t
     -> BVar q s
 konst = liftOp1 . op1 $ \x ->
