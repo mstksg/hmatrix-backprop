@@ -653,7 +653,10 @@ meanCov v = (t ^^. _1, t ^^. _2)
     t = ($ v) . liftOp1 . op1 $ \x ->
         ( tupT2 (H.meanCov x)
         , \(T2 dMean dCov) ->
-              let Just gradMean = H.withColumns (replicate m dMean) H.exactDims
+              let Just gradMean = (`H.withRows` H.exactDims)
+                                . replicate m
+                                . (/ H.konst (fromIntegral m))
+                                $ dMean
                   gradCov       = undefined dCov
               in  gradMean + gradCov
         )
@@ -667,7 +670,9 @@ meanL
     -> BVar s (H.R n)
 meanL = liftOp1 . op1 $ \x ->
     ( fst (H.meanCov x)
-    , fromJust . (`H.withColumns` H.exactDims) . replicate m
+    , fromJust . (`H.withRows` H.exactDims)
+               . replicate m
+               . (/ H.konst (fromIntegral m))
     )
   where
     m = fromInteger $ natVal (Proxy @m)
@@ -756,6 +761,8 @@ cross = liftOp2 . op2 $ \x y ->
 {-# INLINE cross #-}
 
 -- | Create matrix with diagonal, and fill with default entries
+--
+-- TODO: a bug in H.diagR
 diagR
     :: forall m n k field vec mat s.
       ( Reifies s W
