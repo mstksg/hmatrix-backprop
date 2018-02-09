@@ -28,13 +28,11 @@ import qualified Numeric.LinearAlgebra                 as HU
 import qualified Numeric.LinearAlgebra.Static          as H
 import qualified Numeric.LinearAlgebra.Static.Backprop as B
 
-{-# ANN module "HLint: ignore Use camelCase" #-}
-
 nudge :: Double
 nudge = 1e-4
 
 eps :: Double
-eps = 1e-9
+eps = 1e-7
 
 class Testing c where
     type TIx c :: Type
@@ -117,8 +115,8 @@ nudgeProp gn f = property $ do
     when (r**2 < eps) discard
     i <- forAll $ Gen.element (allIx inp)
     (old, new) <- validGrad (ixLens i) inp gr (evalBP (scalarize . f))
-    footnoteShow (r, gr, old, new, (old - new)**2)
-    assert $ (old - new)**2 < eps
+    footnoteShow (r, gr, old, new, (old - new)**2, ((old - new)/old)**2)
+    assert $ ((old - new)/old)**2 < eps
 
 nudgeProp2
     :: (Show c, Num c, Testing c, Show (TIx c), Show d, Num d, Testing d, Show (TIx d), Testing e)
@@ -134,19 +132,21 @@ nudgeProp2 gnc gnd f = property $ do
     i <- forAll $ Gen.element (allIx (T2 inpC inpD))
     (old, new) <- validGrad (ixLens i) (T2 inpC inpD) gr
           (evalBP (\t -> scalarize $ f (t ^^. _1) (t ^^. _2)))
-    footnoteShow (r, gr, old, new, (old - new)**2)
-    assert $ (old - new)**2 < eps
+    footnoteShow (r, gr, old, new, (old - new)**2, ((old - new)/old)**2)
+    assert $ ((old - new)/old)**2 < eps
 
 genDouble :: Gen Double
 genDouble = Gen.double (Range.linearFracFrom 0 (-10) 10)
 
 genVec :: forall n. KnownNat n => Gen (H.R n)
-genVec = H.vector <$> replicateM n genDouble
+genVec = Gen.filter ((== fromIntegral n) . H.norm_0) $
+           H.vector <$> replicateM n genDouble
   where
     n = fromIntegral $ natVal (Proxy @n)
 
 genMat :: forall n m. (KnownNat n, KnownNat m) => Gen (H.L n m)
-genMat = H.matrix <$> replicateM nm genDouble
+genMat = Gen.filter ((== fromIntegral nm) . H.norm_0) $
+          H.matrix <$> replicateM nm genDouble
   where
     nm = fromIntegral $ natVal (Proxy @n) * natVal (Proxy @m)
 

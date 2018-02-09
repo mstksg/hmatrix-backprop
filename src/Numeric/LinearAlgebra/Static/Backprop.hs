@@ -620,7 +620,7 @@ norm_InfM
     => BVar s (H.L n m)
     -> BVar s H.ℝ
 norm_InfM = liftOp1 . op1 $ \x ->
-    let n = H.norm_1 x
+    let n = H.norm_Inf x
     in  (n, \d -> let d' = H.konst d
                   in  fromJust
                     . (`H.withRows` H.exactDims)
