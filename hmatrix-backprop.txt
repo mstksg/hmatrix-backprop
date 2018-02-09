@@ -2,7 +2,9 @@
 -- See Hoogle, http://www.haskell.org/hoogle/
 
 
--- | Please see the README on Github at
+-- | hmatrix operations lifted for backprop
+--   
+--   Please see the README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
 @version 0.1.0.0
@@ -52,7 +54,9 @@
 --   <a>svd_</a> works for <a>evalBP</a> but not <a>gradBP</a>.</li>
 --   <li><a>svdTall</a>, <a>svdFlat</a>: Not sure where to start for
 --   these</li>
---   <li><tt>qr</tt>: Same story</li>
+--   <li><tt>qr</tt>: Same story.
+--   <a>https://github.com/tensorflow/tensorflow/issues/6504</a> might
+--   yield a clue?</li>
 --   <li><a>her</a>: No <a>Num</a> instance for <a>Her</a> makes this
 --   impossible at the moment with the current backprop API</li>
 --   <li><a>exmp</a>: Definitely possible, but I haven't dug deep enough to
@@ -69,7 +73,7 @@
 --   <a>withOrth</a>, <a>withRows</a>, etc.; not quite sure what the best
 --   way to handle these are at the moment.</li>
 --   <li><a>withRows</a> and <a>withColumns</a> made "type-safe", without
---   existential types, with <a>fromRows</a> and <tt>fromCOlumns</tt>.</li>
+--   existential types, with <a>fromRows</a> and <a>fromColumns</a>.</li>
 --   </ul>
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
@@ -81,7 +85,7 @@ vec4 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> B
 infixl 4 &
 (#) :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (R n) -> BVar s (R m) -> BVar s (R (n + m))
 infixl 4 #
-split :: (Reifies s W, KnownNat p, KnownNat n, p <= n) => BVar s (R n) -> (BVar s (R p), BVar s (R (n - p)))
+split :: forall p n s. (Reifies s W, KnownNat p, KnownNat n, p <= n) => BVar s (R n) -> (BVar s (R p), BVar s (R (n - p)))
 headTail :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> (BVar s ℝ, BVar s (R (n - 1)))
 
 -- | Potentially extremely bad for anything but short lists!!!
@@ -97,8 +101,8 @@ col :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (L n 1)
 infixl 3 |||
 (===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L r1 c) -> BVar s (L r2 c) -> BVar s (L (r1 + r2) c)
 infixl 2 ===
-splitRows :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m) => BVar s (L m n) -> (BVar s (L p n), BVar s (L (m - p) n))
-splitCols :: (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n) => BVar s (L m n) -> (BVar s (L m p), BVar s (L m (n - p)))
+splitRows :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m) => BVar s (L m n) -> (BVar s (L p n), BVar s (L (m - p) n))
+splitCols :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n) => BVar s (L m n) -> (BVar s (L m p), BVar s (L m (n - p)))
 unrow :: (Reifies s W, KnownNat n) => BVar s (L 1 n) -> BVar s (R n)
 uncol :: (Reifies s W, KnownNat n) => BVar s (L n 1) -> BVar s (R n)
 tr :: (Reifies s W, Transposable m mt, Transposable mt m, Num m, Num mt) => BVar s m -> BVar s mt
@@ -127,6 +131,8 @@ infixr 8 <.>
 -- | Can only get the singular values, for now. Let me know if you find an
 --   algorithm that can compute the gradients based on differentials for
 --   the other matricies!
+--   
+--   TODO: bug in diagR
 svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n)
 
 -- | Version of <a>svd</a> that returns the full SVD, but if you attempt to
@@ -159,7 +165,7 @@ norm_0 :: (Reifies s W, Normed a, Num a) => BVar s a -> BVar s ℝ
 -- | Sum of absolute values
 norm_1V :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
 
--- | Maximum norm_1 of columns
+-- | Maximum <a>norm_1</a> of columns
 norm_1M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 
 -- | Square root of sum of squares
@@ -173,16 +179,19 @@ norm_2M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 -- | Maximum absolute value
 norm_InfV :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
 
--- | Maximum norm_1 of rows
+-- | Maximum <a>norm_1</a> of rows
 norm_InfM :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
 mean :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> BVar s ℝ
 
--- | Mean and covariance. If you know you won't use the covariance, it is
---   best to use <a>meanL</a>.
+-- | Mean and covariance. If you know you only want to use one or the
+--   other, use <a>meanL</a> or <a>cov</a>.
 meanCov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> (BVar s (R n), BVar s (Sym n))
 
 -- | <a>meanCov</a>, but if you know you won't use the covariance.
 meanL :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> BVar s (R n)
+
+-- | <a>cov</a>, but if you know you won't use the covariance.
+cov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> BVar s (Sym n)
 class Disp t
 disp :: Disp t => Int -> t -> IO ()
 class Domain field (vec :: Nat -> *) (mat :: Nat -> Nat -> *) | mat -> vec field, vec -> mat field, field -> mat vec
@@ -192,6 +201,8 @@ dot :: (Reifies s W, KnownNat n, Domain field vec mat, Sized field (vec n) d, Nu
 cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
 
 -- | Create matrix with diagonal, and fill with default entries
+--   
+--   TODO: a bug in H.diagR
 diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
 dvmap :: (Reifies s W, Num (vec n), Storable field, Storable (field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
@@ -219,7 +230,7 @@ toRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) 
 toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector n (BVar s (R m))
 fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
 fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
-konst :: (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
+konst :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
@@ -239,7 +250,7 @@ sym :: (Reifies s W, KnownNat n) => BVar s (Sq n) -> BVar s (Sym n)
 -- | $M^T M$
 mTm :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (Sym n)
 
--- | Warning: the gradient is going to not be symmetric, and so is
+-- | Warning: the gradient is going necessarily symmetric, and so is
 --   <i>not</i> meant to be used directly. Rather, it is meant to be used
 --   in the middle (or at the end) of a longer computation.
 unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
