@@ -32,7 +32,7 @@ nudge :: Double
 nudge = 1e-4
 
 eps :: Double
-eps = 1e-7
+eps = 1e-9
 
 class Testing c where
     type TIx c :: Type
@@ -54,7 +54,7 @@ instance Testing Double where
     type TIx Double = ()
     allIx _ = [()]
     ixLens _ = id
-    scalarize = id
+    scalarize = abs
 
 instance KnownNat n => Testing (H.R n) where
     type TIx (H.R n) = Int
@@ -66,7 +66,7 @@ instance (KnownNat n, KnownNat m) => Testing (H.L n m) where
     type TIx (H.L n m) = (Int, Int)
     allIx m = Ix.range ((0,0), bimap pred pred (H.size m))
     ixLens = ixContainer
-    scalarize = B.norm_2M
+    scalarize = sqrt . B.sumElements . (**2)
 
 instance (Testing a, Testing b, Num a, Num b) => Testing (T2 a b) where
     type TIx (T2 a b) = Either (TIx a) (TIx b)
@@ -136,17 +136,15 @@ nudgeProp2 gnc gnd f = property $ do
     assert $ ((old - new)/old)**2 < eps
 
 genDouble :: Gen Double
-genDouble = Gen.double (Range.linearFracFrom 0 (-10) 10)
+genDouble = Gen.filter ((> eps) . (**2)) $ Gen.double (Range.linearFracFrom 0 (-10) 10)
 
 genVec :: forall n. KnownNat n => Gen (H.R n)
-genVec = Gen.filter ((== fromIntegral n) . H.norm_0) $
-           H.vector <$> replicateM n genDouble
+genVec = H.vector <$> replicateM n genDouble
   where
     n = fromIntegral $ natVal (Proxy @n)
 
 genMat :: forall n m. (KnownNat n, KnownNat m) => Gen (H.L n m)
-genMat = Gen.filter ((== fromIntegral nm) . H.norm_0) $
-          H.matrix <$> replicateM nm genDouble
+genMat = H.matrix <$> replicateM nm genDouble
   where
     nm = fromIntegral $ natVal (Proxy @n) * natVal (Proxy @m)
 

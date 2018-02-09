@@ -81,6 +81,8 @@
 --     to handle these are at the moment.
 --     * 'H.withRows' and 'H.withColumns' made "type-safe", without
 --     existential types, with 'fromRows' and 'fromColumns'.
+--
+-- Added 'sumElements', as well, for convenience.
 
 module Numeric.LinearAlgebra.Static.Backprop (
   -- * Vector
@@ -168,6 +170,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , fromColumns
   -- ** Misc Operations
   , konst
+  , sumElements
   , extractV
   , extractM
   , create
@@ -1053,6 +1056,16 @@ konst = liftOp1 . op1 $ \x ->
     , HU.sumElements . H.extract
     )
 {-# INLINE konst #-}
+
+sumElements
+    :: forall t s d q. (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
+    => BVar q s
+    -> BVar q t
+sumElements = liftOp1 . op1 $ \x ->
+    ( HU.sumElements . H.extract $ x
+    , H.konst
+    )
+{-# INLINE sumElements #-}
 
 -- | Only needed until https://github.com/DanBurton/ANum/pull/1 goes
 -- through

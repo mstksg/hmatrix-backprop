@@ -215,6 +215,12 @@ prop_konstV = nudgeProp genDouble (B.konst @_ @(B.R 5))
 prop_konstM :: Property
 prop_konstM = nudgeProp genDouble (B.konst @_ @(B.L 5 4))
 
+prop_sumElementsV :: Property
+prop_sumElementsV = nudgeProp (genVec @5) B.sumElements
+
+prop_sumElementsM :: Property
+prop_sumElementsM = nudgeProp (genMat @5 @4) B.sumElements
+
 -- , extractV
 -- , extractM
 -- , create
@@ -234,14 +240,14 @@ prop_unSym = nudgeProp (genMat @5 @5) (B.unSym . B.sym)
 tryGroup :: Group -> Group
 tryGroup Group{..} =
     Group groupName
-          ((map . second) (withTests 500) groupProperties)
+          ((map . second) (withTests 250) groupProperties)
 
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
 
-  results <- checkSequential (tryGroup $$(discover))
+  results <- checkParallel (tryGroup $$(discover))
 
   unless results exitFailure
 
