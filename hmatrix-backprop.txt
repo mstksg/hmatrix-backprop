@@ -75,6 +75,8 @@
 --   <li><a>withRows</a> and <a>withColumns</a> made "type-safe", without
 --   existential types, with <a>fromRows</a> and <a>fromColumns</a>.</li>
 --   </ul>
+--   
+--   Added <a>sumElements</a>, as well, for convenience.
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
 type ℝ = Double
@@ -231,6 +233,7 @@ toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m 
 fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
 fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
 konst :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
+sumElements :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q s -> BVar q t
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
