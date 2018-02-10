@@ -205,6 +205,9 @@ dot :: (Reifies s W, KnownNat n, Domain field vec mat, Sized field (vec n) d, Nu
 cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
 
 -- | Create matrix with diagonal, and fill with default entries
+--   
+--   Note that this inherits the bug in <a>diagR</a> if used with a version
+--   of <i>hmatrix</i> wiith the bug (currently, 0.18.2.0).
 diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
 dvmap :: (Reifies s W, Num (vec n), Storable field, Storable (field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
