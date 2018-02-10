@@ -38,6 +38,8 @@ library:
   - Numeric.LinearAlgebra.Static.Backprop
   ghc-options:
   - -fwarn-redundant-constraints
+  dependencies:
+  - ANum >= 0.2
 
 tests:
   hmatrix-backprop-test:

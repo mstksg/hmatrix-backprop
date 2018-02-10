@@ -23,6 +23,18 @@ Formulas for gradients come from the following papers:
 Some functions are not yet implemented!  See module documentation for details.
 PR's definitely appreciated :)
 
+Tests
+-----
+
+Currently numeric tests are implemented as property tests using hedgehog, but
+it is possible that the answers might differ from the true values by an amount
+undetectable by property tests.
+
+All functions currently are tested except for the higher-order functions.
+
+They are tested by "nudging" components of inputs and checking if the change in
+the function outputs match what is expected from the backpropagated gradient.
+
 TODO
 ----
 

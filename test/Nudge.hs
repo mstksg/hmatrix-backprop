@@ -7,7 +7,6 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeInType            #-}
 
 module Nudge where
 
@@ -35,7 +34,7 @@ nudge :: Double
 nudge = 1e-6
 
 eps :: Double
-eps = 1e-10
+eps = 1e-9
 
 class (Num c, Show c, Show (TIx c)) => Testing c where
     type TIx c :: Type
@@ -62,7 +61,7 @@ instance Testing Double where
     ixLens _ = id
     scalarize = abs
     genTest = Gen.filter ((> eps) . (**2)) $
-         Gen.double (Range.linearFracFrom 0 (-10) 10)
+         Gen.double (Range.linearFracFrom 0 (-5) 5)
 
 instance KnownNat n => Testing (H.R n) where
     type TIx (H.R n) = Int
@@ -72,7 +71,6 @@ instance KnownNat n => Testing (H.R n) where
     genTest = H.vector <$> replicateM n genTest
       where
         n = fromIntegral $ natVal (Proxy @n)
-
 
 instance (KnownNat n, KnownNat m) => Testing (H.L n m) where
     type TIx (H.L n m) = (Int, Int)
@@ -88,14 +86,14 @@ instance Testing (HU.Vector Double) where
     allIx v = [0 .. HU.size v - 1]
     ixLens = ixContainer
     scalarize = liftOp1 . op1 $ \xs -> (HU.sumElements xs, (`HU.konst` HU.size xs))
-    genTest = HU.fromList <$> Gen.list (Range.singleton 5) genTest
+    genTest = HU.fromList <$> replicateM 3 genTest
 
 instance Testing (HU.Matrix Double) where
     type TIx (HU.Matrix Double) = (Int, Int)
     allIx m = Ix.range ((0,0), bimap pred pred (HU.size m))
     ixLens = ixContainer
     scalarize = liftOp1 . op1 $ \xs -> (HU.sumElements xs, (`HU.konst` HU.size xs))
-    genTest = HU.fromLists <$> (replicateM 5 . replicateM 4) genTest
+    genTest = HU.fromLists <$> (replicateM 3 . replicateM 2) genTest
 
 instance (KnownNat n, Testing a) => Testing (SV.Vector n a) where
     type TIx (SV.Vector n a) = (Finite n, TIx a)
