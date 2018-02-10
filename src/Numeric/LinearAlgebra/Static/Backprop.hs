@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                                      #-}
 {-# LANGUAGE DataKinds                                #-}
 {-# LANGUAGE FlexibleContexts                         #-}
 {-# LANGUAGE GADTs                                    #-}
@@ -9,6 +10,10 @@
 {-# LANGUAGE ViewPatterns                             #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
+#if MIN_VERSION_base(4,11,0)
+#else
+{-# OPTIONS_GHC -Wno-compat                           #-}
+#endif
 
 -- |
 -- Module      : Numeric.LinearAlgebra.Static.Backprop
@@ -80,9 +85,6 @@
 -- Some other notes:
 --
 --     * Added 'sumElements', as well, for convenience.
---     * Lifted 'H.svd' is temporarily currently not exported, due to a bug
---     in /hmatrix/ in the 'H.diagR' function.  When this bug is patched,
---     'H.svd' will exported.
 
 module Numeric.LinearAlgebra.Static.Backprop (
   -- * Vector
@@ -124,9 +126,8 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , (#>)
   , (<.>)
   -- * Factorizations
-  -- $svd
-  -- , svd
-  -- , svd_
+  , svd
+  , svd_
   , H.Eigen
   , eigensystem
   , eigenvalues
@@ -199,6 +200,10 @@ import qualified Data.Vector.Sized            as SV
 import qualified Numeric.LinearAlgebra        as HU
 import qualified Numeric.LinearAlgebra.Devel  as HU
 import qualified Numeric.LinearAlgebra.Static as H
+
+#if MIN_VERSION_base(4,11,0)
+import           Prelude hiding               ((<>))
+#endif
 
 vec2
     :: Reifies s W
@@ -436,35 +441,29 @@ infixr 8 #>
 infixr 8 <.>
 {-# INLINE (<.>) #-}
 
--- $svd
---
--- Note: Lifted versions of 'H.svd' temporarily unexported due to a bug in
--- /hmatrix/, in 'H.diagR'.
-
 -- | Can only get the singular values, for now.  Let me know if you find an
 -- algorithm that can compute the gradients based on differentials for the
 -- other matricies!
 --
--- TODO: bug in diagR
-_svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> BVar s (H.R n)
-_svd = liftOp1 . op1 $ \x ->
+svd = liftOp1 . op1 $ \x ->
     let (u, σ, v) = H.svd x
     in  ( σ
-        , \dΣ -> u H.<> H.diagR 0 dΣ H.<> H.tr v
+        , \(dΣ :: H.R n) -> (u H.<> H.diagR 0 dΣ) H.<> H.tr v
+                -- must manually associate because of bug in diagR in
+                -- hmatrix-0.18.2.0
         )
-{-# INLINE _svd #-}
+{-# INLINE svd #-}
 
 -- | Version of 'svd' that returns the full SVD, but if you attempt to find
 -- the gradient, it will fail at runtime if you ever use U or V.
---
--- Useful if you want to only use 'evalBP'.
-_svd_
+svd_
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> (BVar s (H.L m m), BVar s (H.R n), BVar s (H.L n n))
-_svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
+svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
   where
     o :: Op '[H.L m n] (T3 (H.L m m) (H.R n) (H.L n n))
     o = op1 $ \x ->
@@ -472,13 +471,13 @@ _svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
         in  ( T3 u σ v
             , \(T3 dU dΣ dV) ->
                     if H.norm_0 dU == 0 && H.norm_0 dV == 0
-                      then u H.<> H.diagR 0 dΣ H.<> H.tr v
+                      then (u H.<> H.diagR 0 dΣ) H.<> H.tr v
                       else error "svd_: Cannot backprop if U and V are used."
             )
     {-# INLINE o #-}
     t = liftOp1 o r
     {-# NOINLINE t #-}
-{-# INLINE _svd_ #-}
+{-# INLINE svd_ #-}
 
 helpEigen :: KnownNat n => H.Sym n -> (H.R n, H.L n n, H.L n n, H.L n n)
 helpEigen x = (l, v, H.inv v, H.tr v)
@@ -792,9 +791,6 @@ cross = liftOp2 . op2 $ \x y ->
 {-# INLINE cross #-}
 
 -- | Create matrix with diagonal, and fill with default entries
---
--- Note that this inherits the bug in 'H.diagR' if used with a version of
--- /hmatrix/ wiith the bug (currently, 0.18.2.0).
 diagR
     :: forall m n k field vec mat s.
        ( Reifies s W
@@ -835,6 +831,9 @@ dvmap f = liftOp1 . op1 $ \x ->
         , \d -> d * fromJust (H.create dx)
         )
 {-# INLINE dvmap #-}
+
+-- TODO: Can be made more efficient if backprop exports
+-- a custom-total-derivative version
 
 -- | A version of 'dvmap' that is less performant but is based on
 -- 'H.zipWithVector' from 'H.Domain'.

@@ -88,13 +88,11 @@ prop_tr = nudgeProp @(L 3 2) B.tr
 prop_diag :: Property
 prop_diag = nudgeProp @(R 3) B.diag
 
--- TODO: bug in diagR
--- prop_svd :: Property
--- prop_svd = nudgeProp (genMat @5 @4) B.svd
+prop_svd :: Property
+prop_svd = nudgeProp @(L 3 2) B.svd
 
--- TODO: bug in diagR
--- prop_svd_ :: Property
--- prop_svd_ = nudgeProp (genMat @5 @4) ((\(_,x,_) -> x) . B.svd_)
+prop_svd_ :: Property
+prop_svd_ = nudgeProp @(L 3 2) ((\(_,x,_) -> x) . B.svd_)
 
 prop_eigensystem1 :: Property
 prop_eigensystem1 = nudgeProp @(L 3 2) (fst . B.eigensystem . B.mTm)

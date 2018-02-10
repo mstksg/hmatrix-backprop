@@ -1,12 +1,13 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE DataKinds                          #-}
+{-# LANGUAGE FlexibleContexts                   #-}
+{-# LANGUAGE FlexibleInstances                  #-}
+{-# LANGUAGE MultiParamTypeClasses              #-}
+{-# LANGUAGE RankNTypes                         #-}
+{-# LANGUAGE ScopedTypeVariables                #-}
+{-# LANGUAGE TupleSections                      #-}
+{-# LANGUAGE TypeApplications                   #-}
+{-# LANGUAGE TypeFamilies                       #-}
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
 module Nudge where
 
@@ -16,7 +17,7 @@ import           Data.Finite
 import           Data.Kind
 import           Data.Maybe
 import           Data.Proxy
-import           GHC.TypeNats
+import           GHC.TypeLits
 import           Hedgehog
 import           Lens.Micro
 import           Lens.Micro.Platform                   ()
@@ -70,7 +71,7 @@ instance KnownNat n => Testing (H.R n) where
     scalarize = B.norm_2V
     genTest = H.vector <$> replicateM n genTest
       where
-        n = fromIntegral $ natVal (Proxy @n)
+        n = fromInteger $ natVal (Proxy @n)
 
 instance (KnownNat n, KnownNat m) => Testing (H.L n m) where
     type TIx (H.L n m) = (Int, Int)
@@ -79,7 +80,7 @@ instance (KnownNat n, KnownNat m) => Testing (H.L n m) where
     scalarize = sqrt . B.sumElements . (**2)
     genTest = H.matrix <$> replicateM nm genTest
       where
-        nm = fromIntegral $ natVal (Proxy @n) * natVal (Proxy @m)
+        nm = fromInteger $ natVal (Proxy @n) * natVal (Proxy @m)
 
 instance Testing (HU.Vector Double) where
     type TIx (HU.Vector Double) = Int
