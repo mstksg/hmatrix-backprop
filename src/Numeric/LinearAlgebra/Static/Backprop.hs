@@ -10,10 +10,6 @@
 {-# LANGUAGE ViewPatterns                             #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
-#if MIN_VERSION_base(4,11,0)
-#else
-{-# OPTIONS_GHC -Wno-compat                           #-}
-#endif
 
 -- |
 -- Module      : Numeric.LinearAlgebra.Static.Backprop

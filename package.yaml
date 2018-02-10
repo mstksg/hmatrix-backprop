@@ -22,8 +22,8 @@ description:         Please see the README on Github at <https://github.com/mstk
 ghc-options:
 - -Wall
 - -Wcompat
-- -Wredundant-constraints
 - -Wincomplete-record-updates
+- -Wredundant-constraints
 
 dependencies:
 - backprop >= 0.1.2

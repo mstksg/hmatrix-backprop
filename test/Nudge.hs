@@ -1,13 +1,12 @@
-{-# LANGUAGE DataKinds                          #-}
-{-# LANGUAGE FlexibleContexts                   #-}
-{-# LANGUAGE FlexibleInstances                  #-}
-{-# LANGUAGE MultiParamTypeClasses              #-}
-{-# LANGUAGE RankNTypes                         #-}
-{-# LANGUAGE ScopedTypeVariables                #-}
-{-# LANGUAGE TupleSections                      #-}
-{-# LANGUAGE TypeApplications                   #-}
-{-# LANGUAGE TypeFamilies                       #-}
-{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 module Nudge where
 
