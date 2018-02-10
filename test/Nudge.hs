@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeInType            #-}
@@ -12,6 +13,7 @@ module Nudge where
 
 import           Control.Monad
 import           Data.Bifunctor
+import           Data.Finite
 import           Data.Kind
 import           Data.Maybe
 import           Data.Proxy
@@ -22,6 +24,7 @@ import           Lens.Micro.Platform                   ()
 import           Numeric.Backprop
 import           Numeric.Backprop.Tuple
 import qualified Data.Ix                               as Ix
+import qualified Data.Vector.Sized                     as SV
 import qualified Hedgehog.Gen                          as Gen
 import qualified Hedgehog.Range                        as Range
 import qualified Numeric.LinearAlgebra                 as HU
@@ -32,43 +35,79 @@ nudge :: Double
 nudge = 1e-6
 
 eps :: Double
-eps = 1e-8
+eps = 1e-10
 
-class Testing c where
+class (Num c, Show c, Show (TIx c)) => Testing c where
     type TIx c :: Type
     allIx  :: c -> [TIx c]
     ixLens :: TIx c -> Lens' c Double
     scalarize :: Reifies s W => BVar s c -> BVar s Double
+    genTest :: Gen c
+
+sized
+    :: forall s t d. H.Sized t s d
+    => Lens' s (d t)
+sized f = fmap (fromJust . H.create) . f . H.extract
 
 ixContainer
-    :: forall s t d. (H.Sized t s d, HU.Container d t)
+    :: forall t d. HU.Container d t
     => HU.IndexOf d
-    -> Lens' s t
-ixContainer i f = fmap (fromJust . H.create) . go f . H.extract
-  where
-    go :: Lens' (d t) t
-    go = lens (`HU.atIndex` i)
-              (\xs x -> HU.accum xs (\_ _ -> x) [(i, 0)])
+    -> Lens' (d t) t
+ixContainer i = lens (`HU.atIndex` i)
+                     (\xs x -> HU.accum xs (\_ _ -> x) [(i, x)])
 
 instance Testing Double where
     type TIx Double = ()
     allIx _ = [()]
     ixLens _ = id
     scalarize = abs
+    genTest = Gen.filter ((> eps) . (**2)) $
+         Gen.double (Range.linearFracFrom 0 (-10) 10)
 
 instance KnownNat n => Testing (H.R n) where
     type TIx (H.R n) = Int
     allIx v = [0 .. H.size v - 1]
-    ixLens = ixContainer
+    ixLens i = sized . ixContainer i
     scalarize = B.norm_2V
+    genTest = H.vector <$> replicateM n genTest
+      where
+        n = fromIntegral $ natVal (Proxy @n)
+
 
 instance (KnownNat n, KnownNat m) => Testing (H.L n m) where
     type TIx (H.L n m) = (Int, Int)
     allIx m = Ix.range ((0,0), bimap pred pred (H.size m))
-    ixLens = ixContainer
+    ixLens i = sized . ixContainer i
     scalarize = sqrt . B.sumElements . (**2)
+    genTest = H.matrix <$> replicateM nm genTest
+      where
+        nm = fromIntegral $ natVal (Proxy @n) * natVal (Proxy @m)
 
-instance (Testing a, Testing b, Num a, Num b) => Testing (T2 a b) where
+instance Testing (HU.Vector Double) where
+    type TIx (HU.Vector Double) = Int
+    allIx v = [0 .. HU.size v - 1]
+    ixLens = ixContainer
+    scalarize = liftOp1 . op1 $ \xs -> (HU.sumElements xs, (`HU.konst` HU.size xs))
+    genTest = HU.fromList <$> Gen.list (Range.singleton 5) genTest
+
+instance Testing (HU.Matrix Double) where
+    type TIx (HU.Matrix Double) = (Int, Int)
+    allIx m = Ix.range ((0,0), bimap pred pred (HU.size m))
+    ixLens = ixContainer
+    scalarize = liftOp1 . op1 $ \xs -> (HU.sumElements xs, (`HU.konst` HU.size xs))
+    genTest = HU.fromLists <$> (replicateM 5 . replicateM 4) genTest
+
+instance (KnownNat n, Testing a) => Testing (SV.Vector n a) where
+    type TIx (SV.Vector n a) = (Finite n, TIx a)
+    allIx = fst . SV.imapM (\i x -> ((fromIntegral i,) <$> allIx x , x))
+    ixLens (i,j) = SV.ix i . ixLens j
+    scalarize = scalarize . liftOp1 o . (^ (2 :: Int))
+      where
+        o :: Op '[SV.Vector n a] a
+        o = op1 $ \xs -> (SV.sum xs, SV.replicate)
+    genTest = SV.replicateM genTest
+
+instance (Testing a, Testing b) => Testing (T2 a b) where
     type TIx (T2 a b) = Either (TIx a) (TIx b)
     allIx (T2 x y) = (Left  <$> allIx x)
                   ++ (Right <$> allIx y)
@@ -77,6 +116,7 @@ instance (Testing a, Testing b, Num a, Num b) => Testing (T2 a b) where
     scalarize t = B.norm_2V (B.vec2 (scalarize (t ^^. _1))
                                     (scalarize (t ^^. _2))
                             )
+    genTest = T2 <$> genTest <*> genTest
 
 instance (Testing a, Testing b, Testing c, Num a, Num b, Num c) => Testing (T3 a b c) where
     type TIx (T3 a b c) = Either (TIx a) (Either (TIx b) (TIx c))
@@ -90,6 +130,7 @@ instance (Testing a, Testing b, Testing c, Num a, Num b, Num c) => Testing (T3 a
                                     (scalarize (t ^^. _2))
                                     (scalarize (t ^^. _3))
                             )
+    genTest = T3 <$> genTest <*> genTest <*> genTest
 
 validGrad
     :: Monad m
@@ -105,12 +146,11 @@ validGrad l x0 g f = forAll $ Gen.double (Range.constantFrom 0 (-nudge) nudge) <
     in  (old, new)
 
 nudgeProp
-    :: (Show c, Num c, Testing c, Show (TIx c), Testing d)
-    => Gen c
-    -> (forall s. Reifies s W => BVar s c -> BVar s d)
+    :: forall c d. (Testing c, Testing d)
+    => (forall s. Reifies s W => BVar s c -> BVar s d)
     -> Property
-nudgeProp gn f = property $ do
-    inp <- forAll gn
+nudgeProp f = property $ do
+    inp <- forAll genTest
     let (r,gr) = backprop (scalarize . f) inp
     when (r**2 < eps) discard
     i <- forAll $ Gen.element (allIx inp)
@@ -119,14 +159,12 @@ nudgeProp gn f = property $ do
     assert $ ((old - new)/old)**2 < eps
 
 nudgeProp2
-    :: (Show c, Num c, Testing c, Show (TIx c), Show d, Num d, Testing d, Show (TIx d), Testing e)
-    => Gen c
-    -> Gen d
-    -> (forall s. Reifies s W => BVar s c -> BVar s d -> BVar s e)
+    :: forall c d e. (Testing c, Testing d, Testing e)
+    => (forall s. Reifies s W => BVar s c -> BVar s d -> BVar s e)
     -> Property
-nudgeProp2 gnc gnd f = property $ do
-    inpC <- forAll gnc
-    inpD <- forAll gnd
+nudgeProp2 f = property $ do
+    inpC <- forAll genTest
+    inpD <- forAll genTest
     let (r, gr) = second tupT2 $ backprop2 (\x -> scalarize . f x) inpC inpD
     when (r**2 < eps) discard
     i <- forAll $ Gen.element (allIx (T2 inpC inpD))
@@ -134,17 +172,4 @@ nudgeProp2 gnc gnd f = property $ do
           (evalBP (\t -> scalarize $ f (t ^^. _1) (t ^^. _2)))
     footnoteShow (r, gr, old, new, (old - new)**2, ((old - new)/old)**2)
     assert $ ((old - new)/old)**2 < eps
-
-genDouble :: Gen Double
-genDouble = Gen.filter ((> eps) . (**2)) $ Gen.double (Range.linearFracFrom 0 (-10) 10)
-
-genVec :: forall n. KnownNat n => Gen (H.R n)
-genVec = H.vector <$> replicateM n genDouble
-  where
-    n = fromIntegral $ natVal (Proxy @n)
-
-genMat :: forall n m. (KnownNat n, KnownNat m) => Gen (H.L n m)
-genMat = H.matrix <$> replicateM nm genDouble
-  where
-    nm = fromIntegral $ natVal (Proxy @n) * natVal (Proxy @m)
 

@@ -50,4 +50,5 @@ tests:
     dependencies:
     - hmatrix-backprop
     - hedgehog
+    - finite-typelits
     - microlens-platform

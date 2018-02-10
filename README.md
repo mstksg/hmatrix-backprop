@@ -23,3 +23,12 @@ Formulas for gradients come from the following papers:
 Some functions are not yet implemented!  See module documentation for details.
 PR's definitely appreciated :)
 
+TODO
+----
+
+Apart from the exact API of hmatrix, it'd be nice to have:
+
+1.  Statically sized convolutions.  Should probably add this to hmatrix instead
+    first, though.
+
+

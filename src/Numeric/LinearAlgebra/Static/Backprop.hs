@@ -283,15 +283,13 @@ headTail v = (t ^^. _1, t ^^. _2)
 -- | Potentially extremely bad for anything but short lists!!!
 vector
     :: forall n s. (Reifies s W, KnownNat n)
-    => [BVar s H.ℝ]
+    => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
-vector vs = case SV.fromList @n vs of
-    Nothing  -> error "vector: invalid number of elements"
-    Just vs' ->
-        liftOp1 (opIso (fromJust . H.create   . VG.convert . SV.fromSized)
-                       (fromJust . SV.toSized . VG.convert . H.extract   )
-                )
-                (collectVar vs')
+vector vs =
+    liftOp1 (opIso (fromJust . H.create   . VG.convert . SV.fromSized)
+                   (fromJust . SV.toSized . VG.convert . H.extract   )
+            )
+            (collectVar vs)
 {-# INLINE vector #-}
 
 linspace
@@ -759,7 +757,7 @@ cross
     -> BVar s (vec 3)
 cross = liftOp2 . op2 $ \x y ->
     ( x `H.cross` y
-    , \d -> (y `H.cross` d, d `H.cross` x)  -- is sign correct?
+    , \d -> (y `H.cross` d, d `H.cross` x)
     )
 {-# INLINE cross #-}
 
@@ -1087,7 +1085,8 @@ instance Num a => Num (Mayb a) where
 -- | If there are extra items in the total derivative, they are dropped.
 -- If there are missing items, they are treated as zero.
 extractV
-    :: ( Reifies q W
+    :: forall t s q.
+       ( Reifies q W
        , H.Sized t s HU.Vector
        , Num s
        , HU.Konst t Int HU.Vector
@@ -1111,7 +1110,8 @@ extractV = liftOp1 . op1 $ \x ->
 -- | If there are extra items in the total derivative, they are dropped.
 -- If there are missing items, they are treated as zero.
 extractM
-    :: ( Reifies q W
+    :: forall t s q.
+       ( Reifies q W
        , H.Sized t s HU.Matrix
        , Num s
        , HU.Konst t (Int, Int) HU.Matrix
@@ -1146,7 +1146,7 @@ extractM = liftOp1 . op1 $ \x ->
 {-# INLINE extractM #-}
 
 create
-    :: (Reifies q W, H.Sized t s d, Num s, Num (d t))
+    :: forall t s d q. (Reifies q W, H.Sized t s d, Num s, Num (d t))
     => BVar q (d t)
     -> Maybe (BVar q s)
 create = fmap (getMayb . sequenceVar) . liftOp1 $
