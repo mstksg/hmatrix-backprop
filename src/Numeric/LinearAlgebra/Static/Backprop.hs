@@ -792,9 +792,12 @@ cross = liftOp2 . op2 $ \x y ->
 {-# INLINE cross #-}
 
 -- | Create matrix with diagonal, and fill with default entries
+--
+-- Note that this inherits the bug in 'H.diagR' if used with a version of
+-- /hmatrix/ wiith the bug (currently, 0.18.2.0).
 diagR
     :: forall m n k field vec mat s.
-      ( Reifies s W
+       ( Reifies s W
        , H.Domain field vec mat
        , Num (vec k)
        , Num (mat m n)
@@ -805,8 +808,8 @@ diagR
        , H.Sized field (mat m n) HU.Matrix
        , H.Sized field (vec k) HU.Vector
        )
-    => BVar s field
-    -> BVar s (vec k)
+    => BVar s field             -- ^ default value
+    -> BVar s (vec k)           -- ^ diagonal
     -> BVar s (mat m n)
 diagR = liftOp2 . op2 $ \c x ->
     ( H.diagR c x
