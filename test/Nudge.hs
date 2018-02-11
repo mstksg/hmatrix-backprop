@@ -34,7 +34,7 @@ nudge :: Double
 nudge = 1e-6
 
 eps :: Double
-eps = 1e-9
+eps = 1e-11
 
 class (Num c, Show c, Show (TIx c)) => Testing c where
     type TIx c :: Type
@@ -148,10 +148,12 @@ nudgeProp
     => (forall s. Reifies s W => BVar s c -> BVar s d)
     -> Property
 nudgeProp f = property $ do
-    inp <- forAll genTest
+    (inp, i) <- forAll $ do
+      inp <- genTest
+      i   <- Gen.element (allIx inp)
+      return (inp, i)
     let (r,gr) = backprop (scalarize . f) inp
     when (r**2 < eps) discard
-    i <- forAll $ Gen.element (allIx inp)
     (old, new) <- validGrad (ixLens i) inp gr (evalBP (scalarize . f))
     footnoteShow (r, gr, old, new, (old - new)**2, ((old - new)/old)**2)
     assert $ ((old - new)/old)**2 < eps
@@ -161,11 +163,13 @@ nudgeProp2
     => (forall s. Reifies s W => BVar s c -> BVar s d -> BVar s e)
     -> Property
 nudgeProp2 f = property $ do
-    inpC <- forAll genTest
-    inpD <- forAll genTest
+    (inpC, inpD, i) <- forAll $ do
+      inpC <- genTest
+      inpD <- genTest
+      i    <- Gen.element (allIx (T2 inpC inpD))
+      return (inpC, inpD, i)
     let (r, gr) = second tupT2 $ backprop2 (\x -> scalarize . f x) inpC inpD
     when (r**2 < eps) discard
-    i <- forAll $ Gen.element (allIx (T2 inpC inpD))
     (old, new) <- validGrad (ixLens i) (T2 inpC inpD) gr
           (evalBP (\t -> scalarize $ f (t ^^. _1) (t ^^. _2)))
     footnoteShow (r, gr, old, new, (old - new)**2, ((old - new)/old)**2)

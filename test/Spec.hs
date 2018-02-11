@@ -253,7 +253,7 @@ main = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
 
-  results <- checkParallel (tryGroup 250 $$(discover))
+  results <- checkParallel (tryGroup 100 $$(discover))
 
   unless results exitFailure
 

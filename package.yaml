@@ -17,7 +17,14 @@ category:            Math
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on Github at <https://github.com/mstksg/hmatrix-backprop#readme>
+description: |
+    hmatrix operations lifted for backprop.
+
+    Meant to act as a drop-in replacement to the API of
+    Numeric.LinearAlgebra.Static.  Just change your imports, and your
+    functions are automatically backpropagatable.
+
+    See README on Github at <https://github.com/mstksg/hmatrix-backprop#readme>
 
 ghc-options:
 - -Wall
@@ -29,6 +36,7 @@ dependencies:
 - backprop >= 0.1.2
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
+- hmatrix-vector-sized >= 0.1
 - microlens
 - vector-sized >= 0.6
 

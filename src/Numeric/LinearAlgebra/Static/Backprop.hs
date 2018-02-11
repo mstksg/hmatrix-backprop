@@ -186,16 +186,19 @@ import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
 import           GHC.TypeLits
-import           Lens.Micro hiding            ((&))
+import           Lens.Micro hiding                   ((&))
 import           Numeric.Backprop
 import           Numeric.Backprop.Op
 import           Numeric.Backprop.Tuple
 import           Unsafe.Coerce
-import qualified Data.Vector.Generic          as VG
-import qualified Data.Vector.Sized            as SV
-import qualified Numeric.LinearAlgebra        as HU
-import qualified Numeric.LinearAlgebra.Devel  as HU
-import qualified Numeric.LinearAlgebra.Static as H
+import qualified Data.Vector.Generic                 as VG
+import qualified Data.Vector.Generic.Sized           as SVG
+import qualified Data.Vector.Sized                   as SV
+import qualified Data.Vector.Storable.Sized          as SVS
+import qualified Numeric.LinearAlgebra               as HU
+import qualified Numeric.LinearAlgebra.Devel         as HU
+import qualified Numeric.LinearAlgebra.Static        as H
+import qualified Numeric.LinearAlgebra.Static.Vector as H
 
 #if MIN_VERSION_base(4,11,0)
 import           Prelude hiding               ((<>))
@@ -288,9 +291,7 @@ vector
     => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
 vector vs =
-    liftOp1 (opIso (fromJust . H.create   . VG.convert . SV.fromSized)
-                   (fromJust . SV.toSized . VG.convert . H.extract   )
-            )
+    liftOp1 (opIso (H.vecR . SVG.convert) (SVG.convert . H.rVec))
             (collectVar vs)
 {-# INLINE vector #-}
 
@@ -399,8 +400,8 @@ matrix
 matrix vs = case SV.fromList @(m * n) vs of
     Nothing  -> error "matrix: invalid number of elements"
     Just vs' ->
-        liftOp1 (opIso (fromJust . H.create   . HU.reshape n . VG.convert . SV.fromSized)
-                       (fromJust . SV.toSized . VG.convert   . HU.flatten . H.extract   )
+        liftOp1 (opIso (fromJust . H.create . HU.reshape n . VG.convert . SV.fromSized)
+                       (SV.concatMap (SVG.convert . H.rVec) . H.lRows)
                 )
                 (collectVar vs')
   where
@@ -491,13 +492,11 @@ eigensystem
     -> (BVar s (H.R n), BVar s (H.L n n))
 eigensystem u = (t ^^. _1, t ^^. _2)
   where
-    n :: Int
-    n = fromInteger $ natVal (Proxy @n)
     o :: Op '[H.Sym n] (T2 (H.R n) (H.L n n))
     o = op1 $ \x ->
         let (l, v, vInv, vTr) = helpEigen x
-            Just lRep = H.withRows (replicate n l) H.exactDims
-            fMat   = (1 - H.eye) * (lRep - H.tr lRep)
+            lRep = H.rowsL . SV.replicate $ l
+            fMat = (1 - H.eye) * (lRep - H.tr lRep)
         in  ( T2 l v
             , \(T2 dL dV) -> unsafeCoerce $
                        H.tr vInv
@@ -576,13 +575,12 @@ norm_1M
 norm_1M = liftOp1 . op1 $ \x ->
     let n = H.norm_1 x
     in  (n, \d -> let d' = H.konst d
-                  in  fromJust
-                    . (`H.withColumns` H.exactDims)
-                    . map (\c -> if H.norm_1 c == n
-                                   then d' * signum c
-                                   else 0
-                          )
-                    . H.toColumns
+                  in  H.colsL
+                    . SV.map (\c -> if H.norm_1 c == n
+                                      then d' * signum c
+                                      else 0
+                             )
+                    . H.lCols
                     $ x
         )
 {-# INLINE norm_1M #-}
@@ -618,10 +616,14 @@ norm_InfV
 norm_InfV = liftOp1 . op1 $ \x ->
     let n :: H.ℝ
         n = H.norm_Inf x
-        setD d = HU.cmap $ \e -> if abs e == n
+    in  (n, \d -> H.vecR
+                . SVS.map (\e -> if abs e == n
                                    then signum e * d
                                    else 0
-    in  (n, \d -> fromJust . H.create . setD d . H.extract $ x)
+                          )
+                . H.rVec
+                $ x
+        )
 {-# ANN norm_InfV "HLint: ignore Use camelCase" #-}
 {-# INLINE norm_InfV #-}
 
@@ -633,13 +635,12 @@ norm_InfM
 norm_InfM = liftOp1 . op1 $ \x ->
     let n = H.norm_Inf x
     in  (n, \d -> let d' = H.konst d
-                  in  fromJust
-                    . (`H.withRows` H.exactDims)
-                    . map (\c -> if H.norm_1 c == n
-                                   then d' * signum c
-                                   else 0
-                          )
-                    . H.toRows
+                  in  H.rowsL
+                    . SV.map (\c -> if H.norm_1 c == n
+                                      then d' * signum c
+                                      else 0
+                             )
+                    . H.lRows
                     $ x
         )
 {-# ANN norm_InfM "HLint: ignore Use camelCase" #-}
@@ -658,15 +659,12 @@ gradCov
     -> H.R n
     -> H.Sym n
     -> H.L m n
-gradCov x μ dσ = fromJust
-               . (`H.withRows` H.exactDims)
-               . map (subtract (dDiffsSum / m))
-               $ H.toRows dDiffs
+gradCov x μ dσ = H.rowsL
+               . SV.map (subtract (dDiffsSum / m))
+               . H.lRows
+               $ dDiffs
   where
-    diffs :: H.L m n
-    Just diffs = (`H.withRows` H.exactDims)
-               . map (subtract μ)
-               $ H.toRows x
+    diffs = H.rowsL . SV.map (subtract μ) . H.lRows $ x
     dDiffs = H.konst (2/n) * (diffs H.<> H.tr (H.unSym dσ))
     dDiffsSum = sum . H.toRows $ dDiffs
     m = fromIntegral $ natVal (Proxy @m)
@@ -686,8 +684,9 @@ meanCov v = (t ^^. _1, t ^^. _2)
         let (μ, σ) = H.meanCov x
         in  ( T2 μ σ
             , \(T2 dμ dσ) ->
-                let Just gradMean = (`H.withRows` H.exactDims) $
-                      replicate m (dμ / H.konst (fromIntegral m))
+                let gradMean = H.rowsL
+                             . SV.replicate
+                             $ (dμ / H.konst m)
                 in  gradMean + gradCov x μ dσ
             )
     {-# NOINLINE t #-}
@@ -700,9 +699,7 @@ meanL
     -> BVar s (H.R n)
 meanL = liftOp1 . op1 $ \x ->
     ( fst (H.meanCov x)
-    , fromJust . (`H.withRows` H.exactDims)
-               . replicate m
-               . (/ H.konst (fromIntegral m))
+    , H.rowsL . SV.replicate . (/ H.konst m)
     )
   where
     m = fromInteger $ natVal (Proxy @m)
@@ -1030,48 +1027,32 @@ inv = liftOp1 . op1 $ \x ->
     in  ( xInv, \d -> - xInvTr `H.mul` d `H.mul` xInvTr )
 {-# INLINE inv #-}
 
-rowsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector m (H.R n)
-rowsV = fromJust . SV.fromList . H.toRows
-{-# INLINE rowsV #-}
-
-colsV :: (KnownNat m, KnownNat n) => H.L m n -> SV.Vector n (H.R m)
-colsV = fromJust . SV.fromList . H.toColumns
-{-# INLINE colsV #-}
-
-vRows :: (KnownNat m, KnownNat n) => SV.Vector m (H.R n) -> H.L m n
-vRows = (`H.withRows` fromJust . H.exactDims) . SV.toList
-{-# INLINE vRows #-}
-
-vCols :: (KnownNat m, KnownNat n) => SV.Vector n (H.R m) -> H.L m n
-vCols = (`H.withColumns` fromJust . H.exactDims) . SV.toList
-{-# INLINE vCols #-}
-
 toRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
-toRows = sequenceVar . liftOp1 (opIso rowsV vRows)
+toRows = sequenceVar . liftOp1 (opIso H.lRows H.rowsL)
 {-# INLINE toRows #-}
 
 toColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
-toColumns = sequenceVar . liftOp1 (opIso colsV vCols)
+toColumns = sequenceVar . liftOp1 (opIso H.lCols H.colsL)
 {-# INLINE toColumns #-}
 
 fromRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
-fromRows = liftOp1 (opIso vRows rowsV) . collectVar
+fromRows = liftOp1 (opIso H.rowsL H.lRows) . collectVar
 {-# INLINE fromRows #-}
 
 fromColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
-    => SV.Vector m (BVar s (H.R n))
+    => SV.Vector n (BVar s (H.R m))
     -> BVar s (H.L m n)
-fromColumns = liftOp1 (opIso vRows rowsV) . collectVar
+fromColumns = liftOp1 (opIso H.colsL H.lCols) . collectVar
 {-# INLINE fromColumns #-}
 
 konst

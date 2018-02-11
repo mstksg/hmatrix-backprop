@@ -1,6 +1,9 @@
 hmatrix-backprop
 ================
 
+[![hmatrix-backprop on Hackage](https://img.shields.io/hackage/v/hmatrix-backprop.svg?maxAge=2592000)](https://hackage.haskell.org/package/hmatrix-backprop)
+[![Build Status](https://travis-ci.org/mstksg/hmatrix-backprop.svg?branch=master)](https://travis-ci.org/mstksg/hmatrix-backprop)
+
 *[hmatrix][]* operations lifted for *[backprop][]*.
 
 [hmatrix]: http://hackage.haskell.org/package/hmatrix
