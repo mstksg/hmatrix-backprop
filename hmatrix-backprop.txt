@@ -4,7 +4,13 @@
 
 -- | hmatrix operations lifted for backprop
 --   
---   Please see the README on Github at
+--   hmatrix operations lifted for backprop.
+--   
+--   Meant to act as a drop-in replacement to the API of
+--   Numeric.LinearAlgebra.Static. Just change your imports, and your
+--   functions are automatically backpropagatable.
+--   
+--   See README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
 @version 0.1.0.0
@@ -237,7 +243,7 @@ inv :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Transposab
 toRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector m (BVar s (R n))
 toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector n (BVar s (R m))
 fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
-fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
+fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector n (BVar s (R m)) -> BVar s (L m n)
 konst :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
 sumElements :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q s -> BVar q t
 
