@@ -36,7 +36,7 @@ dependencies:
 - backprop >= 0.1.2
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
-- hmatrix-vector-sized >= 0.1
+- hmatrix-vector-sized >= 0.1.1
 - microlens
 - vector-sized >= 0.6
 

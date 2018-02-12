@@ -42,7 +42,7 @@ packages:
 extra-deps:
 - backprop-0.1.2.0
 - ANum-0.2.0.1
-- hmatrix-vector-sized-0.1.0.0
+- hmatrix-vector-sized-0.1.1.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

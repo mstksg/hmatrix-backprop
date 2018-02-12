@@ -400,12 +400,10 @@ matrix
 matrix vs = case SV.fromList @(m * n) vs of
     Nothing  -> error "matrix: invalid number of elements"
     Just vs' ->
-        liftOp1 (opIso (fromJust . H.create . HU.reshape n . VG.convert . SV.fromSized)
-                       (SV.concatMap (SVG.convert . H.rVec) . H.lRows)
+        liftOp1 (opIso (H.vecL . SVG.convert)
+                       (SVG.convert . H.lVec)
                 )
                 (collectVar vs')
-  where
-    n = fromInteger $ natVal (Proxy @n)
 {-# INLINE matrix #-}
 
 -- | Matrix product
