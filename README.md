@@ -16,9 +16,6 @@ re-exported.
 
 [static]: https://hackage.haskell.org/package/hmatrix-0.18.2.0/docs/Numeric-LinearAlgebra-Static.html
 
-Also includes a backpropagatable `sumElements`, and also lenses into *hmatrix*
-types meant to be used with `^^.` and `viewVar`.
-
 Formulas for gradients come from the following papers:
 
 *   <https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf>
