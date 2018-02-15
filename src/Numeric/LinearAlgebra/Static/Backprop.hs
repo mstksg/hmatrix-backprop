@@ -43,6 +43,9 @@
 -- functions are automatically backpropagatable.  Useful types are all
 -- re-exported.
 --
+-- Also contains 'sumElements' 'BVar' operation, and lenses into hmatrix
+-- types to use with '^^.' and 'viewVar'.
+--
 -- Formulas for gradients come from the following papers:
 --
 --     * https://people.maths.ox.ac.uk/gilesm/files/NA-08-01.pdf
@@ -77,10 +80,6 @@
 --     to handle these are at the moment.
 --     * 'H.withRows' and 'H.withColumns' made "type-safe", without
 --     existential types, with 'fromRows' and 'fromColumns'.
---
--- Some other notes:
---
---     * Added 'sumElements', as well, for convenience.
 
 module Numeric.LinearAlgebra.Static.Backprop (
   -- * Vector
@@ -179,9 +178,15 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , mTm
   , unSym
   , (<·>)
+  -- * Lenses
+  , ixR
+  , ixL
+  , ixRow
+  , ixCol
   ) where
 
 import           Data.ANum
+import           Data.Finite
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
@@ -400,9 +405,7 @@ matrix
 matrix vs = case SV.fromList @(m * n) vs of
     Nothing  -> error "matrix: invalid number of elements"
     Just vs' ->
-        liftOp1 (opIso (H.vecL . SVG.convert)
-                       (SVG.convert . H.lVec)
-                )
+        liftOp1 (opIso (H.vecL . SVG.convert) (SVG.convert . H.lVec))
                 (collectVar vs')
 {-# INLINE matrix #-}
 
@@ -1208,3 +1211,34 @@ unSym = liftOp1 (opIso H.unSym unsafeCoerce)
 (<·>) = dot
 infixr 8 <·>
 {-# INLINE (<·>) #-}
+
+--- | 'Lens' into an element of an /hmatrix/ vector.
+--
+-- @since 0.1.1.0
+ixR :: KnownNat n => Finite n -> Lens' (H.R n) H.ℝ
+ixR i f = fmap H.vecR . SVS.ix i f . H.rVec
+{-# INLINE ixR #-}
+
+-- | 'Lens' into an element of an /hmatrix/ matrix.
+--
+-- @since 0.1.1.0
+ixL :: (KnownNat m, KnownNat n) => (Finite m, Finite n) -> Lens' (H.L m n) H.ℝ
+ixL (i,j) f (H.extract->v) = fromJust . H.create . go <$> f (v `HU.atIndex` ij)
+  where
+    ij = (fromIntegral i, fromIntegral j)
+    go x = HU.accum v const [(ij, x)]
+{-# INLINE ixL #-}
+
+-- | 'Lens' into a row of an /hmatrix/ matrix.
+--
+-- @since 0.1.1.0
+ixRow :: KnownNat m => Finite m -> Lens' (H.L m n) (H.R n)
+ixRow i f = fmap H.rowsL . SV.ix i f . H.lRows
+{-# INLINE ixRow #-}
+
+-- | 'Lens' into a column of an /hmatrix/ matrix.
+--
+-- @since 0.1.1.0
+ixCol :: KnownNat n => Finite n -> Lens' (H.L m n) (H.R m)
+ixCol i f = fmap H.colsL . SV.ix i f . H.lCols
+{-# INLINE ixCol #-}

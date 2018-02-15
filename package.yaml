@@ -1,5 +1,5 @@
 name:                hmatrix-backprop
-version:             0.1.0.0
+version:             0.1.1.0
 github:              "mstksg/hmatrix-backprop"
 license:             BSD3
 author:              "Justin Le"
@@ -49,6 +49,7 @@ library:
   - ghc-typelits-knownnat
   - ghc-typelits-natnormalise
   - vector
+  - finite-typelits
 
 tests:
   hmatrix-backprop-test:
