@@ -13,7 +13,7 @@
 --   See README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
-@version 0.1.0.0
+@version 0.1.1.0
 
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
@@ -38,6 +38,9 @@
 --   <a>Numeric.LinearAlgebra.Static</a>. Just change your imports, and
 --   your functions are automatically backpropagatable. Useful types are
 --   all re-exported.
+--   
+--   Also contains <a>sumElements</a> <a>BVar</a> operation, and lenses
+--   into hmatrix types to use with <a>^^.</a> and <a>viewVar</a>.
 --   
 --   Formulas for gradients come from the following papers:
 --   
@@ -79,12 +82,6 @@
 --   way to handle these are at the moment.</li>
 --   <li><a>withRows</a> and <a>withColumns</a> made "type-safe", without
 --   existential types, with <a>fromRows</a> and <a>fromColumns</a>.</li>
---   </ul>
---   
---   Some other notes:
---   
---   <ul>
---   <li>Added <a>sumElements</a>, as well, for convenience.</li>
 --   </ul>
 module Numeric.LinearAlgebra.Static.Backprop
 data R (n :: Nat) :: Nat -> *
@@ -273,3 +270,13 @@ unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 -- | Unicode synonym for <tt>&lt;.&gt;&gt;</tt>
 (<·>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <·>
+ixR :: KnownNat n => Finite n -> Lens' (R n) ℝ
+
+-- | <a>Lens</a> into an element of an <i>hmatrix</i> matrix.
+ixL :: (KnownNat m, KnownNat n) => (Finite m, Finite n) -> Lens' (L m n) ℝ
+
+-- | <a>Lens</a> into a row of an <i>hmatrix</i> matrix.
+ixRow :: KnownNat m => Finite m -> Lens' (L m n) (R n)
+
+-- | <a>Lens</a> into a column of an <i>hmatrix</i> matrix.
+ixCol :: KnownNat n => Finite n -> Lens' (L m n) (R m)
