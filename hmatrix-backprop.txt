@@ -39,8 +39,7 @@
 --   your functions are automatically backpropagatable. Useful types are
 --   all re-exported.
 --   
---   Also contains <a>sumElements</a> <a>BVar</a> operation, and lenses
---   into hmatrix types to use with <a>^^.</a> and <a>viewVar</a>.
+--   Also contains <a>sumElements</a> <a>BVar</a> operation.
 --   
 --   Formulas for gradients come from the following papers:
 --   
@@ -270,13 +269,55 @@ unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
 -- | Unicode synonym for <tt>&lt;.&gt;&gt;</tt>
 (<·>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <·>
-ixR :: KnownNat n => Finite n -> Lens' (R n) ℝ
 
--- | <a>Lens</a> into an element of an <i>hmatrix</i> matrix.
-ixL :: (KnownNat m, KnownNat n) => (Finite m, Finite n) -> Lens' (L m n) ℝ
+-- | A <tt><a>BVar</a> s a</tt> is a value of type <tt>a</tt> that can be
+--   "backpropagated".
+--   
+--   Functions referring to <a>BVar</a>s are tracked by the library and can
+--   be automatically differentiated to get their gradients and results.
+--   
+--   For simple numeric values, you can use its <a>Num</a>,
+--   <a>Fractional</a>, and <a>Floating</a> instances to manipulate them as
+--   if they were the numbers they represent.
+--   
+--   If <tt>a</tt> contains items, the items can be accessed and extracted
+--   using lenses. A <tt><a>Lens'</a> b a</tt> can be used to access an
+--   <tt>a</tt> inside a <tt>b</tt>, using <tt>^^.</tt> (<a>viewVar</a>):
+--   
+--   <pre>
+--   (<a>^.</a>)  ::        a -&gt; <a>Lens'</a> a b -&gt;        b
+--   (<tt>^^.</tt>) :: <a>BVar</a> s a -&gt; <a>Lens'</a> a b -&gt; <a>BVar</a> s b
+--   </pre>
+--   
+--   There is also <tt>^^?</tt> (<a>previewVar</a>), to use a
+--   <tt>Prism'</tt> or <a>Traversal'</a> to extract a target that may or
+--   may not be present (which can implement pattern matching),
+--   <tt>^^..</tt> (<a>toListOfVar</a>) to use a <a>Traversal'</a> to
+--   extract <i>all</i> targets inside a <a>BVar</a>, and <tt>.~~</tt>
+--   (<a>setVar</a>) to set and update values inside a <a>BVar</a>.
+--   
+--   For more complex operations, libraries can provide functions on
+--   <a>BVar</a>s using <a>liftOp</a> and related functions. This is how
+--   you can create primitive functions that users can use to manipulate
+--   your library's values.
+--   
+--   For example, the <i>hmatrix</i> library has a matrix-vector
+--   multiplication function, <tt>#&gt; :: L m n -&gt; R n -&gt; L m</tt>.
+--   
+--   A library could instead provide a function <tt>#&gt; :: <a>BVar</a> (L
+--   m n) -&gt; BVar (R n) -&gt; BVar (R m)</tt>, which the user can then
+--   use to manipulate their <a>BVar</a>s of <tt>L m n</tt>s and <tt>R
+--   n</tt>s, etc.
+--   
+--   See <a>Numeric.Backprop#liftops</a> and documentation for
+--   <a>liftOp</a> for more information.
+data BVar s a :: Type -> * -> *
+class Reifies k (s :: k) a | s -> a
 
--- | <a>Lens</a> into a row of an <i>hmatrix</i> matrix.
-ixRow :: KnownNat m => Finite m -> Lens' (L m n) (R n)
-
--- | <a>Lens</a> into a column of an <i>hmatrix</i> matrix.
-ixCol :: KnownNat n => Finite n -> Lens' (L m n) (R m)
+-- | An ephemeral Wengert Tape in the environment. Used internally to track
+--   of the computational graph of variables.
+--   
+--   For the end user, one can just imagine <tt><a>Reifies</a> s
+--   <a>W</a></tt> as a required constraint on <tt>s</tt> that allows
+--   backpropagation to work.
+data W :: *
