@@ -177,24 +177,31 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , mTm
   , unSym
   , (<·>)
+  -- * Backprop types re-exported
+  -- | Re-exported for convenience.
+  --
+  -- @since 0.1.1.0
+  , BVar
+  , Reifies
+  , W
   ) where
 
 import           Data.ANum
+import           Data.Bitraversable
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
 import           GHC.TypeLits
 import           Lens.Micro hiding                   ((&))
 import           Numeric.Backprop
-import           Numeric.Backprop.Op
 import           Numeric.Backprop.Tuple
 import           Unsafe.Coerce
+import qualified Data.Vector                         as V
 import qualified Data.Vector.Generic                 as VG
 import qualified Data.Vector.Generic.Sized           as SVG
 import qualified Data.Vector.Sized                   as SV
 import qualified Data.Vector.Storable.Sized          as SVS
 import qualified Numeric.LinearAlgebra               as HU
-import qualified Numeric.LinearAlgebra.Devel         as HU
 import qualified Numeric.LinearAlgebra.Static        as H
 import qualified Numeric.LinearAlgebra.Static.Vector as H
 
@@ -207,9 +214,7 @@ vec2
     => BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 2)
-vec2 = liftOp2 $ opIsoN
-    (\(x ::< y ::< Ø)                -> H.vec2 x y     )
-    (\(HU.toList.H.extract->[dx,dy]) -> dx ::< dy ::< Ø)
+vec2 = isoVar2 H.vec2 (\(H.rVec->v) -> (SVS.index v 0, SVS.index v 1))
 {-# INLINE vec2 #-}
 
 vec3
@@ -218,9 +223,7 @@ vec3
     -> BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 3)
-vec3 = liftOp3 $ opIsoN
-    (\(x ::< y ::< z ::< Ø)             -> H.vec3 x y z          )
-    (\(HU.toList.H.extract->[dx,dy,dz]) -> dx ::< dy ::< dz ::< Ø)
+vec3 = isoVar3 H.vec3 (\(H.rVec->v) -> (SVS.index v 0, SVS.index v 1, SVS.index v 2))
 {-# INLINE vec3 #-}
 
 vec4
@@ -230,22 +233,17 @@ vec4
     -> BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R 4)
-vec4 vX vY vZ vW = liftOp o (vX :< vY :< vZ :< vW :< Ø)
-  where
-    o :: Op '[H.ℝ, H.ℝ, H.ℝ, H.ℝ] (H.R 4)
-    o = opIsoN
-      (\(x ::< y ::< z ::< w ::< Ø)          -> H.vec4 x y z w               )
-      (\(HU.toList.H.extract->[dx,dy,dz,dw]) -> dx ::< dy ::< dz ::< dw ::< Ø)
-    {-# INLINE o #-}
+vec4 vX vY vZ vW = isoVarN
+    (\(x ::< y ::< z ::< w ::< Ø) -> H.vec4 x y z w)
+    (\(H.rVec->v) -> SVS.index v 0 ::< SVS.index v 1 ::< SVS.index v 2 ::< SVS.index v 3 ::< Ø)
+    (vX :< vY :< vZ :< vW :< Ø)
 {-# INLINE vec4 #-}
 
 (&) :: (Reifies s W, KnownNat n, 1 <= n, KnownNat (n + 1))
     => BVar s (H.R n)
     -> BVar s H.ℝ
     -> BVar s (H.R (n + 1))
-(&) = liftOp2 $ opIsoN
-    (\(xs ::< y ::< Ø)    -> xs H.& y                         )
-    (\(H.split->(dxs,dy)) -> dxs ::< fst (H.headTail dy) ::< Ø)
+(&) = isoVar2 (H.&) (\(H.split->(dxs,dy)) -> (dxs, fst (H.headTail dy)))
 infixl 4 &
 {-# INLINE (&) #-}
 
@@ -253,9 +251,7 @@ infixl 4 &
     => BVar s (H.R n)
     -> BVar s (H.R m)
     -> BVar s (H.R (n + m))
-(#) = liftOp2 $ opIsoN
-    (\(x ::< y ::< Ø)    -> x H.# y        )
-    (\(H.split->(dX,dY)) -> dX ::< dY ::< Ø)
+(#) = isoVar2 (H.#) H.split
 infixl 4 #
 {-# INLINE (#) #-}
 
@@ -265,9 +261,7 @@ split
     -> (BVar s (H.R p), BVar s (H.R (n - p)))
 split v = (t ^^. _1, t ^^. _2)      -- should we just return the T2 ?
   where
-    t = liftOp1 (opIso (tupT2 . H.split)
-                       (uncurryT2 (H.#))
-                ) v
+    t = isoVar (tupT2 . H.split) (uncurryT2 (H.#)) v
     {-# NOINLINE t #-}
 {-# INLINE split #-}
 
@@ -277,9 +271,9 @@ headTail
     -> (BVar s H.ℝ, BVar s (H.R (n - 1)))
 headTail v = (t ^^. _1, t ^^. _2)
   where
-    t = liftOp1 (opIso (tupT2 . H.headTail)
-                       (\(T2 d dx) -> (H.konst d :: H.R 1) H.# dx)
-                ) v
+    t = isoVar (tupT2 . H.headTail)
+               (\(T2 d dx) -> (H.konst d :: H.R 1) H.# dx)
+               v
     {-# NOINLINE t #-}
 {-# INLINE headTail #-}
 
@@ -288,9 +282,8 @@ vector
     :: forall n s. (Reifies s W, KnownNat n)
     => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
-vector vs =
-    liftOp1 (opIso (H.vecR . SVG.convert) (SVG.convert . H.rVec))
-            (collectVar vs)
+vector = isoVar (H.vecR . SVG.convert) (SVG.convert . H.rVec)
+       . collectVar
 {-# INLINE vector #-}
 
 linspace
@@ -310,22 +303,20 @@ linspace = liftOp2 . op2 $ \l u ->
 row :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
     -> BVar s (H.L 1 n)
-row = liftOp1 $ opIso H.row H.unrow
+row = isoVar H.row H.unrow
 {-# INLINE row #-}
 
 col :: (Reifies s W, KnownNat n)
     => BVar s (H.R n)
     -> BVar s (H.L n 1)
-col = liftOp1 $ opIso H.col H.uncol
+col = isoVar H.col H.uncol
 {-# INLINE col #-}
 
 (|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2))
       => BVar s (H.L c r1)
       -> BVar s (H.L c r2)
       -> BVar s (H.L c (r1 + r2))
-(|||) = liftOp2 $ opIsoN
-    (\(x ::< y ::< Ø)        -> x H.||| y        )
-    (\(H.splitCols->(dX,dY)) -> dX ::< dY ::< Ø)
+(|||) = isoVar2 (H.|||) H.splitCols
 infixl 3 |||
 {-# INLINE (|||) #-}
 
@@ -333,9 +324,7 @@ infixl 3 |||
       => BVar s (H.L r1        c)
       -> BVar s (H.L r2        c)
       -> BVar s (H.L (r1 + r2) c)
-(===) = liftOp2 $ opIsoN
-    (\(x ::< y ::< Ø)        -> x H.=== y        )
-    (\(H.splitRows->(dX,dY)) -> dX ::< dY ::< Ø)
+(===) = isoVar2 (H.===) H.splitRows
 infixl 2 ===
 {-# INLINE (===) #-}
 
@@ -345,9 +334,7 @@ splitRows
     -> (BVar s (H.L p n), BVar s (H.L (m - p) n))
 splitRows v = (t ^^. _1, t ^^. _2)
   where
-    t = liftOp1 (opIso (tupT2 . H.splitRows)
-                       (\(T2 dx dy) -> dx H.=== dy)
-                ) v
+    t = isoVar (tupT2 . H.splitRows) (uncurryT2 (H.===)) v
     {-# NOINLINE t #-}
 {-# INLINE splitRows #-}
 
@@ -357,9 +344,7 @@ splitCols
     -> (BVar s (H.L m p), BVar s (H.L m (n - p)))
 splitCols v = (t ^^. _1, t ^^. _2)
   where
-    t = liftOp1 (opIso (tupT2 . H.splitCols)
-                       (uncurryT2 (H.|||))
-                ) v
+    t = isoVar (tupT2 . H.splitCols) (uncurryT2 (H.|||)) v
     {-# NOINLINE t #-}
 {-# INLINE splitCols #-}
 
@@ -367,20 +352,20 @@ unrow
     :: (Reifies s W, KnownNat n)
     => BVar s (H.L 1 n)
     -> BVar s (H.R n)
-unrow = liftOp1 $ opIso H.unrow H.row
+unrow = isoVar H.unrow H.row
 {-# INLINE unrow #-}
 
 uncol
     :: (Reifies s W, KnownNat n)
     => BVar s (H.L n 1)
     -> BVar s (H.R n)
-uncol = liftOp1 $ opIso H.uncol H.col
+uncol = isoVar H.uncol H.col
 {-# INLINE uncol #-}
 
 tr  :: (Reifies s W, HU.Transposable m mt, HU.Transposable mt m, Num m, Num mt)
     => BVar s m
     -> BVar s mt
-tr = liftOp1 $ opIso H.tr H.tr
+tr = isoVar H.tr H.tr
 {-# INLINE tr #-}
 
 diag
@@ -395,11 +380,9 @@ matrix
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => [BVar s H.ℝ]
     -> BVar s (H.L m n)
-matrix vs = case SV.fromList @(m * n) vs of
-    Nothing  -> error "matrix: invalid number of elements"
-    Just vs' ->
-        liftOp1 (opIso (H.vecL . SVG.convert) (SVG.convert . H.lVec))
-                (collectVar vs')
+matrix = maybe (error "matrix: invalid number of elements")
+               (isoVar (H.vecL . SVG.convert) (SVG.convert . H.lVec) . collectVar)
+       . SV.fromList @(m * n)
 {-# INLINE matrix #-}
 
 -- | Matrix product
@@ -806,17 +789,18 @@ dvmap
     :: ( Reifies s W
        , Num (vec n)
        , Storable field
-       , Storable (field, field)
        , H.Sized field (vec n) HU.Vector
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
     -> BVar s (vec n)
-dvmap f = liftOp1 . op1 $ \x ->
-    let (y, dx) = HU.unzipVector $ VG.map (backprop f) (H.extract x)
-    in  ( fromJust (H.create y)
-        , \d -> d * fromJust (H.create dx)
-        )
+dvmap f = liftOp1 . op1 $ fromJust
+                        . bitraverse (H.create . VG.convert)
+                                     (fmap (*) . H.create . VG.convert)
+                        . V.unzip
+                        . V.map (backprop f)
+                        . VG.convert
+                        . H.extract
 {-# INLINE dvmap #-}
 
 -- TODO: Can be made more efficient if backprop exports
@@ -845,21 +829,21 @@ dmmap
        ( Reifies s W
        , KnownNat m
        , Num (mat n m)
-       , Storable (field, field)
+       -- , Storable (field, field)
        , H.Sized field (mat n m) HU.Matrix
        , HU.Element field
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
     -> BVar s (mat n m)
-dmmap f = liftOp1 . op1 $ \x ->
-    let (y', dx') = HU.unzipVector
-                  . VG.map (backprop f)
-                  . HU.flatten
-                  $ H.extract x
-    in  ( fromJust . H.create . HU.reshape m $ y'
-        , \d -> (* d) . fromJust . H.create . HU.reshape m $ dx'
-        )
+dmmap f = liftOp1 . op1 $ fromJust
+                        . bitraverse (H.create . HU.reshape m . VG.convert)
+                                     (fmap (*) . H.create . HU.reshape m . VG.convert)
+                        . V.unzip
+                        . V.map (backprop f)
+                        . VG.convert
+                        . HU.flatten
+                        . H.extract
   where
     m :: Int
     m = fromInteger $ natVal (Proxy @m)
@@ -1025,28 +1009,28 @@ toRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
-toRows = sequenceVar . liftOp1 (opIso H.lRows H.rowsL)
+toRows = sequenceVar . isoVar H.lRows H.rowsL
 {-# INLINE toRows #-}
 
 toColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
-toColumns = sequenceVar . liftOp1 (opIso H.lCols H.colsL)
+toColumns = sequenceVar . isoVar H.lCols H.colsL
 {-# INLINE toColumns #-}
 
 fromRows
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
-fromRows = liftOp1 (opIso H.rowsL H.lRows) . collectVar
+fromRows = isoVar H.rowsL H.lRows . collectVar
 {-# INLINE fromRows #-}
 
 fromColumns
     :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
     => SV.Vector n (BVar s (H.R m))
     -> BVar s (H.L m n)
-fromColumns = liftOp1 (opIso H.colsL H.lCols) . collectVar
+fromColumns = isoVar H.colsL H.lCols . collectVar
 {-# INLINE fromColumns #-}
 
 konst
@@ -1136,9 +1120,10 @@ create
     :: forall t s d q. (Reifies q W, H.Sized t s d, Num s, Num (d t))
     => BVar q (d t)
     -> Maybe (BVar q s)
-create = fmap (unANum . sequenceVar) . liftOp1 $
-    opIso (ANum              . H.create)
-          (maybe 0 H.extract . unANum  )
+create = unANum
+       . sequenceVar
+       . isoVar (ANum              . H.create)
+                (maybe 0 H.extract . unANum  )
 {-# INLINE create #-}
 
 
@@ -1192,7 +1177,7 @@ unSym
     :: (Reifies s W, KnownNat n)
     => BVar s (H.Sym n)
     -> BVar s (H.Sq n)
-unSym = liftOp1 (opIso H.unSym unsafeCoerce)
+unSym = isoVar H.unSym unsafeCoerce
 {-# INLINE unSym #-}
 
 -- | Unicode synonym for '<.>>'

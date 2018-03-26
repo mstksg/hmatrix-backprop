@@ -33,7 +33,7 @@ ghc-options:
 - -Wredundant-constraints
 
 dependencies:
-- backprop >= 0.1.2
+- backprop >= 0.1.4
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
 - hmatrix-vector-sized >= 0.1.1

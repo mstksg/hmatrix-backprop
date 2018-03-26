@@ -40,7 +40,7 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- backprop-0.1.2.0
+- backprop-0.1.4.0
 - ANum-0.2.0.1
 - hmatrix-vector-sized-0.1.1.0
 
