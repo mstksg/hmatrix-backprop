@@ -8,8 +8,10 @@ Version 0.1.1.0
 
 <https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.1.0>
 
-*   `dvmap` and `dmmap` rewritten to actually be usable, since before they had
-    nonsensical constraints.
+*   `dvmap`/`dmmap` family rewritten, which is a breaking API change.  Previous
+    version of `dvmap`/`dmmap` would not even compile at all if used, though,
+    because of nonsensical constraints, so it is likely that no code that
+    previously worked is now breaking.
 *   *backprop* types re-exported for convenience
 
 *Internal*

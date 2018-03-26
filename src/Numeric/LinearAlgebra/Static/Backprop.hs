@@ -148,10 +148,12 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , dot
   , cross
   , diagR
+  , vmap
+  , vmap'
   , dvmap
-  , dvmap'
+  , mmap
+  , mmap'
   , dmmap
-  , dmmap'
   , outer
   , zipWithVector
   , zipWithVector'
@@ -187,7 +189,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   ) where
 
 import           Data.ANum
-import           Data.Bitraversable
+import           Data.Bifunctor
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
@@ -204,6 +206,7 @@ import qualified Data.Vector.Storable.Sized          as SVS
 import qualified Numeric.LinearAlgebra               as HU
 import qualified Numeric.LinearAlgebra.Static        as H
 import qualified Numeric.LinearAlgebra.Static.Vector as H
+import qualified Prelude.Backprop                    as B
 
 #if MIN_VERSION_base(4,11,0)
 import           Prelude hiding               ((<>))
@@ -785,7 +788,22 @@ diagR = liftOp2 . op2 $ \c x ->
     )
 {-# INLINE diagR #-}
 
-dvmap
+-- | Note: if possible, use the potentially much more performant 'vmap''.
+vmap
+    :: ( Reifies s W
+       , KnownNat n
+       )
+    => (BVar s Double -> BVar s Double)
+    -> BVar s (H.R n)
+    -> BVar s (H.R n)
+vmap f = isoVar (H.vecR . SVG.convert @V.Vector) (SVG.convert . H.rVec)
+       . B.fmap f
+       . isoVar (SVG.convert . H.rVec) (H.vecR . SVG.convert)
+{-# INLINE vmap #-}
+
+-- | 'vmap', but potentially more performant.  Only usable if the mapped
+-- function does not depend on any external 'BVar's.
+vmap'
     :: ( Reifies s W
        , Num (vec n)
        , Storable field
@@ -794,21 +812,19 @@ dvmap
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
     -> BVar s (vec n)
-dvmap f = liftOp1 . op1 $ fromJust
-                        . bitraverse (H.create . VG.convert)
-                                     (fmap (*) . H.create . VG.convert)
+vmap' f = liftOp1 . op1 $ bimap (fromJust . H.create . VG.convert)
+                                ((*) . fromJust . H.create . VG.convert)
                         . V.unzip
                         . V.map (backprop f)
                         . VG.convert
                         . H.extract
-{-# INLINE dvmap #-}
+{-# INLINE vmap' #-}
 
 -- TODO: Can be made more efficient if backprop exports
 -- a custom-total-derivative version
 
--- | A version of 'dvmap' that is less performant but is based on
--- 'H.zipWithVector' from 'H.Domain'.
-dvmap'
+-- | Note: Potentially less performant than 'vmap''.
+dvmap
     :: ( Reifies s W
        , KnownNat n
        , H.Domain field vec mat
@@ -818,27 +834,41 @@ dvmap'
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
     -> BVar s (vec n)
-dvmap' f = liftOp1 . op1 $ \x ->
+dvmap f = liftOp1 . op1 $ \x ->
     ( H.dvmap (evalBP f) x
     , (H.dvmap (gradBP f) x *)
     )
-{-# INLINE dvmap' #-}
+{-# INLINE dvmap #-}
 
-dmmap
+-- | Note: if possible, use the potentially much more performant 'mmap''.
+mmap
+    :: ( Reifies s W
+       , KnownNat n
+       , KnownNat m
+       )
+    => (BVar s Double -> BVar s Double)
+    -> BVar s (H.L n m)
+    -> BVar s (H.L n m)
+mmap f = isoVar (H.vecL . SVG.convert @V.Vector) (SVG.convert . H.lVec)
+       . B.fmap f
+       . isoVar (SVG.convert . H.lVec) (H.vecL . SVG.convert)
+{-# INLINE mmap #-}
+
+-- | 'mmap', but potentially more performant.  Only usable if the mapped
+-- function does not depend on any external 'BVar's.
+mmap'
     :: forall n m mat field s.
        ( Reifies s W
        , KnownNat m
        , Num (mat n m)
-       -- , Storable (field, field)
        , H.Sized field (mat n m) HU.Matrix
        , HU.Element field
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
     -> BVar s (mat n m)
-dmmap f = liftOp1 . op1 $ fromJust
-                        . bitraverse (H.create . HU.reshape m . VG.convert)
-                                     (fmap (*) . H.create . HU.reshape m . VG.convert)
+mmap' f = liftOp1 . op1 $ bimap (fromJust . H.create . HU.reshape m . VG.convert)
+                                ((*) . fromJust . H.create . HU.reshape m . VG.convert)
                         . V.unzip
                         . V.map (backprop f)
                         . VG.convert
@@ -847,9 +877,10 @@ dmmap f = liftOp1 . op1 $ fromJust
   where
     m :: Int
     m = fromInteger $ natVal (Proxy @m)
-{-# INLINE dmmap #-}
+{-# INLINE mmap' #-}
 
-dmmap'
+-- | Note: Potentially less performant than 'mmap''.
+dmmap
     :: ( Reifies s W
        , KnownNat n
        , KnownNat m
@@ -860,11 +891,11 @@ dmmap'
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
     -> BVar s (mat n m)
-dmmap' f = liftOp1 . op1 $ \x ->
+dmmap f = liftOp1 . op1 $ \x ->
     ( H.dmmap (evalBP f) x
     , (H.dmmap (gradBP f) x *)
     )
-{-# INLINE dmmap' #-}
+{-# INLINE dmmap #-}
 
 outer
     :: ( Reifies s W
