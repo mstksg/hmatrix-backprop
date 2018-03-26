@@ -15,7 +15,8 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-10.4
+# resolver: nightly-2018-03-25
+resolver: lts-11.0
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,12 +38,18 @@ resolver: lts-10.4
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+# - location:
+#     git: https://github.com/mstksg/type-combinators.git
+#     commit: 13e7d4bd99b1a80b5fdb436a85ee52cfa0ff799f
+#   extra-dep: true
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - backprop-0.1.4.0
 - ANum-0.2.0.1
 - hmatrix-vector-sized-0.1.1.0
+# - type-combinators-0.2.4.3
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
