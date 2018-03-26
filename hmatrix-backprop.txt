@@ -214,13 +214,28 @@ cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> B
 
 -- | Create matrix with diagonal, and fill with default entries
 diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
-dvmap :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
--- | A version of <a>dvmap</a> that is less performant but is based on
---   <a>zipWithVector</a> from <a>Domain</a>.
-dvmap' :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
-dmmap :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Sized field (mat n m) Matrix, Element field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
-dmmap' :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+-- | Note: if possible, use the potentially much more performant
+--   <a>vmap'</a>.
+vmap :: (Reifies s W, KnownNat n) => (BVar s Double -> BVar s Double) -> BVar s (R n) -> BVar s (R n)
+
+-- | <a>vmap</a>, but potentially more performant. Only usable if the
+--   mapped function does not depend on any external <a>BVar</a>s.
+vmap' :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
+
+-- | Note: Potentially less performant than <a>vmap'</a>.
+dvmap :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
+
+-- | Note: if possible, use the potentially much more performant
+--   <a>mmap'</a>.
+mmap :: (Reifies s W, KnownNat n, KnownNat m) => (BVar s Double -> BVar s Double) -> BVar s (L n m) -> BVar s (L n m)
+
+-- | <a>mmap</a>, but potentially more performant. Only usable if the
+--   mapped function does not depend on any external <a>BVar</a>s.
+mmap' :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Sized field (mat n m) Matrix, Element field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+
+-- | Note: Potentially less performant than <a>mmap'</a>.
+dmmap :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
 outer :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Num (vec n), Num (vec m), Num (mat n m)) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
 zipWithVector :: (Reifies s W, Num (vec n), Storable field, Storable (field, field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 
