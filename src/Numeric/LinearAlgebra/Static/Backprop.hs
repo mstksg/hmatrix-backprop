@@ -921,22 +921,21 @@ zipWithVector
     :: ( Reifies s W
        , Num (vec n)
        , Storable field
-       , Storable (field, field, field)
        , H.Sized field (vec n) HU.Vector
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field)
     -> BVar s (vec n)
     -> BVar s (vec n)
     -> BVar s (vec n)
-zipWithVector f = liftOp2 . op2 $ \(H.extract->x) (H.extract->y) ->
-    let (z,dx,dy) = VG.unzip3
-                  $ VG.zipWith (\x' y' ->
-                      let (z', (dx', dy')) = backprop2 f x' y'
-                      in  (z', dx', dy')
-                    ) x y
-    in  ( fromJust (H.create z)
-        , \d -> (d * fromJust (H.create dx), d * fromJust (H.create dy))
+zipWithVector f = liftOp2 . op2 $ \(VG.convert.H.extract->x) (VG.convert.H.extract->y) ->
+    let (z, dx, dy) = V.unzip3 $ V.zipWith (\x' -> retup . backprop2 f x') x y
+    in  ( fromJust (H.create (VG.convert z))
+        , \d -> ( d * fromJust (H.create (VG.convert dx))
+                , d * fromJust (H.create (VG.convert dy))
+                )
         )
+  where
+    retup (x, (y, z)) = (x, y, z)
 {-# INLINE zipWithVector #-}
 
 -- | A version of 'zipWithVector' that is less performant but is based on
