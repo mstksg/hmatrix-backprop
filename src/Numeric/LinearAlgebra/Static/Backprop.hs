@@ -157,6 +157,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , outer
   , zipWithVector
   , zipWithVector'
+  , dzipWithVector
   , det
   , invlndet
   , lndet
@@ -793,7 +794,7 @@ vmap
     :: ( Reifies s W
        , KnownNat n
        )
-    => (BVar s Double -> BVar s Double)
+    => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
 vmap f = isoVar (H.vecR . SVG.convert @V.Vector) (SVG.convert . H.rVec)
@@ -846,7 +847,7 @@ mmap
        , KnownNat n
        , KnownNat m
        )
-    => (BVar s Double -> BVar s Double)
+    => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.L n m)
     -> BVar s (H.L n m)
 mmap f = isoVar (H.vecL . SVG.convert @V.Vector) (SVG.convert . H.lVec)
@@ -917,7 +918,21 @@ outer = liftOp2 . op2 $ \x y ->
     )
 {-# INLINE outer #-}
 
+-- | Note: if possible, use the potentially much more performant
+-- 'zipWithVector''.
 zipWithVector
+    :: ( Reifies s W, KnownNat n )
+    => (BVar s H.ℝ -> BVar s H.ℝ -> BVar s H.ℝ)
+    -> BVar s (H.R n)
+    -> BVar s (H.R n)
+    -> BVar s (H.R n)
+zipWithVector f x y = isoVar (H.vecR . SVG.convert) (SVG.convert . H.rVec)
+                    $ B.liftA2 @(SV.Vector _) f (iv x) (iv y)
+  where
+    iv = isoVar (SVG.convert . H.rVec) (H.vecR . SVG.convert)
+{-# INLINE zipWithVector #-}
+
+zipWithVector'
     :: ( Reifies s W
        , Num (vec n)
        , Storable field
@@ -927,7 +942,7 @@ zipWithVector
     -> BVar s (vec n)
     -> BVar s (vec n)
     -> BVar s (vec n)
-zipWithVector f = liftOp2 . op2 $ \(VG.convert.H.extract->x) (VG.convert.H.extract->y) ->
+zipWithVector' f = liftOp2 . op2 $ \(VG.convert.H.extract->x) (VG.convert.H.extract->y) ->
     let (z, dx, dy) = V.unzip3 $ V.zipWith (\x' -> retup . backprop2 f x') x y
     in  ( fromJust (H.create (VG.convert z))
         , \d -> ( d * fromJust (H.create (VG.convert dx))
@@ -936,11 +951,11 @@ zipWithVector f = liftOp2 . op2 $ \(VG.convert.H.extract->x) (VG.convert.H.extra
         )
   where
     retup (x, (y, z)) = (x, y, z)
-{-# INLINE zipWithVector #-}
+{-# INLINE zipWithVector' #-}
 
--- | A version of 'zipWithVector' that is less performant but is based on
--- 'H.zipWithVector' from 'H.Domain'.
-zipWithVector'
+-- | A version of 'zipWithVector'' that is potentially less performant but
+-- is based on 'H.zipWithVector' from 'H.Domain'.
+dzipWithVector
     :: ( Reifies s W
        , KnownNat n
        , H.Domain field vec mat
@@ -951,13 +966,13 @@ zipWithVector'
     -> BVar s (vec n)
     -> BVar s (vec n)
     -> BVar s (vec n)
-zipWithVector' f = liftOp2 . op2 $ \x y ->
+dzipWithVector f = liftOp2 . op2 $ \x y ->
     ( H.zipWithVector (evalBP2 f) x y
     , \d -> let dx = H.zipWithVector (\x' -> fst . gradBP2 f x') x y
                 dy = H.zipWithVector (\x' -> snd . gradBP2 f x') x y
             in  (d * dx, d * dy)
     )
-{-# INLINE zipWithVector' #-}
+{-# INLINE dzipWithVector #-}
 
 det :: ( Reifies s W
        , KnownNat n
