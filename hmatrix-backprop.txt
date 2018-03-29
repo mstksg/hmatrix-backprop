@@ -237,7 +237,7 @@ mmap' :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Sized 
 -- | Note: Potentially less performant than <a>mmap'</a>.
 dmmap :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
 outer :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Num (vec n), Num (vec m), Num (mat n m)) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
-zipWithVector :: (Reifies s W, Num (vec n), Storable field, Storable (field, field, field), Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
+zipWithVector :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | A version of <a>zipWithVector</a> that is less performant but is based
 --   on <a>zipWithVector</a> from <a>Domain</a>.
