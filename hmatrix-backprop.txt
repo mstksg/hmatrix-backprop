@@ -217,7 +217,7 @@ diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (
 
 -- | Note: if possible, use the potentially much more performant
 --   <a>vmap'</a>.
-vmap :: (Reifies s W, KnownNat n) => (BVar s Double -> BVar s Double) -> BVar s (R n) -> BVar s (R n)
+vmap :: (Reifies s W, KnownNat n) => (BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n)
 
 -- | <a>vmap</a>, but potentially more performant. Only usable if the
 --   mapped function does not depend on any external <a>BVar</a>s.
@@ -228,7 +228,7 @@ dvmap :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field)
 
 -- | Note: if possible, use the potentially much more performant
 --   <a>mmap'</a>.
-mmap :: (Reifies s W, KnownNat n, KnownNat m) => (BVar s Double -> BVar s Double) -> BVar s (L n m) -> BVar s (L n m)
+mmap :: (Reifies s W, KnownNat n, KnownNat m) => (BVar s ℝ -> BVar s ℝ) -> BVar s (L n m) -> BVar s (L n m)
 
 -- | <a>mmap</a>, but potentially more performant. Only usable if the
 --   mapped function does not depend on any external <a>BVar</a>s.
@@ -237,11 +237,15 @@ mmap' :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Sized 
 -- | Note: Potentially less performant than <a>mmap'</a>.
 dmmap :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
 outer :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Num (vec n), Num (vec m), Num (mat n m)) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
-zipWithVector :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 
--- | A version of <a>zipWithVector</a> that is less performant but is based
---   on <a>zipWithVector</a> from <a>Domain</a>.
-zipWithVector' :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
+-- | Note: if possible, use the potentially much more performant
+--   <a>zipWithVector'</a>.
+zipWithVector :: (Reifies s W, KnownNat n) => (BVar s ℝ -> BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n) -> BVar s (R n)
+zipWithVector' :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
+
+-- | A version of <a>zipWithVector'</a> that is potentially less performant
+--   but is based on <a>zipWithVector</a> from <a>Domain</a>.
+dzipWithVector :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 det :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
 
 -- | The inverse and the natural log of the determinant together. If you
