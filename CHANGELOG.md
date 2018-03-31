@@ -4,7 +4,7 @@ Changelog
 Version 0.1.2.0
 ---------------
 
-*Mar 29, 2018*
+*Mar 30, 2018*
 
 <https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.2.0>
 
