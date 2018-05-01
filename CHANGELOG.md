@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 0.1.2.1
+---------------
+
+*May 1, 2018*
+
+<https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.2.1>
+
+*   Updated for compatibility with *backprop-0.2.0.0*
+*   Orphan instances added for types in *Numeric.LinearAlgebra.Static*.
+
 Version 0.1.2.0
 ---------------
 

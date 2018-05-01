@@ -4,7 +4,8 @@ hmatrix-backprop
 [![hmatrix-backprop on Hackage](https://img.shields.io/hackage/v/hmatrix-backprop.svg?maxAge=2592000)](https://hackage.haskell.org/package/hmatrix-backprop)
 [![Build Status](https://travis-ci.org/mstksg/hmatrix-backprop.svg?branch=master)](https://travis-ci.org/mstksg/hmatrix-backprop)
 
-*[hmatrix][]* operations lifted for *[backprop][]*.
+*[hmatrix][]* operations lifted for *[backprop][]*, along with orphan instances
+of `Backprop`.
 
 [hmatrix]: http://hackage.haskell.org/package/hmatrix
 [backprop]: http://hackage.haskell.org/package/backprop
@@ -41,8 +42,8 @@ the function outputs match what is expected from the backpropagated gradient.
 TODO
 ----
 
-Apart from the exact API of hmatrix, it'd be nice to have:
-
+1.  Now that new backprop no longer requires `Num`, we can lift normal hmatrix
+    operations as well.
 1.  Statically sized convolutions.  Should probably add this to hmatrix instead
     first, though.
 

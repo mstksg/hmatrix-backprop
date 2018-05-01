@@ -39,6 +39,10 @@ resolver: lts-11.0
 packages:
 - .
 # - location:
+#     git: https://github.com/mstksg/backprop.git
+#     commit: 8a09cee836397c2e398628911dae07290ca82965
+#   extra-dep: true
+# - location:
 #     git: https://github.com/mstksg/type-combinators.git
 #     commit: 13e7d4bd99b1a80b5fdb436a85ee52cfa0ff799f
 #   extra-dep: true
@@ -46,9 +50,8 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-- backprop-0.1.4.0
-- ANum-0.2.0.1
-- hmatrix-vector-sized-0.1.1.0
+- backprop-0.2.0.0
+# - hmatrix-vector-sized-0.1.1.0
 # - type-combinators-0.2.4.3
 
 # Override default flag values for local packages and extra-deps

@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications                         #-}
 {-# LANGUAGE TypeOperators                            #-}
 {-# LANGUAGE ViewPatterns                             #-}
+{-# OPTIONS_GHC -fno-warn-orphans                     #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
@@ -22,7 +23,9 @@
 --
 -- A wrapper over "Numeric.LinearAlgebra.Static" (type-safe vector and
 -- matrix operations based on blas/lapack) that allows its operations to
--- work with <https://hackage.haskell.org/package/backprop backprop>.
+-- work with <https://hackage.haskell.org/package/backprop backprop>.  Also
+-- provides orphan instances of 'Backprop' for types in
+-- "Numeric.LinearAlgebra.Static".
 --
 -- In short, these functions are "lifted" to work with 'BVar's.
 --
@@ -189,29 +192,54 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , W
   ) where
 
-import           Data.ANum
 import           Data.Bifunctor
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
 import           GHC.TypeLits
 import           Lens.Micro hiding                   ((&))
-import           Numeric.Backprop
-import           Numeric.Backprop.Tuple
+import           Numeric.Backprop.Class
+import           Numeric.Backprop.Num
 import           Unsafe.Coerce
 import qualified Data.Vector                         as V
 import qualified Data.Vector.Generic                 as VG
 import qualified Data.Vector.Generic.Sized           as SVG
 import qualified Data.Vector.Sized                   as SV
 import qualified Data.Vector.Storable.Sized          as SVS
+import qualified Numeric.Backprop                    as BBP
 import qualified Numeric.LinearAlgebra               as HU
 import qualified Numeric.LinearAlgebra.Static        as H
 import qualified Numeric.LinearAlgebra.Static.Vector as H
-import qualified Prelude.Backprop                    as B
+import qualified Prelude.Backprop.Num                as B
 
 #if MIN_VERSION_base(4,11,0)
 import           Prelude hiding               ((<>))
 #endif
+
+instance Backprop (H.R n) where
+    zero = zeroNum
+    add = addNum
+    one = oneNum
+
+instance Backprop (H.C n) where
+    zero = zeroNum
+    add = addNum
+    one = oneNum
+
+instance (KnownNat n, KnownNat m) => Backprop (H.L n m) where
+    zero = zeroNum
+    add = addNum
+    one = oneNum
+
+instance (KnownNat n, KnownNat m) => Backprop (H.M n m) where
+    zero = zeroNum
+    add = addNum
+    one = oneNum
+
+instance KnownNat n => Backprop (H.Sym n) where
+    zero = zeroNum
+    add = addNum
+    one = oneNum
 
 vec2
     :: Reifies s W
@@ -263,9 +291,9 @@ split
     :: forall p n s. (Reifies s W, KnownNat p, KnownNat n, p <= n)
     => BVar s (H.R n)
     -> (BVar s (H.R p), BVar s (H.R (n - p)))
-split v = (t ^^. _1, t ^^. _2)      -- should we just return the T2 ?
+split v = (t ^^. _1, t ^^. _2)
   where
-    t = isoVar (tupT2 . H.split) (uncurryT2 (H.#)) v
+    t = BBP.isoVar H.split (uncurry (H.#)) v
     {-# NOINLINE t #-}
 {-# INLINE split #-}
 
@@ -275,9 +303,9 @@ headTail
     -> (BVar s H.ℝ, BVar s (H.R (n - 1)))
 headTail v = (t ^^. _1, t ^^. _2)
   where
-    t = isoVar (tupT2 . H.headTail)
-               (\(T2 d dx) -> (H.konst d :: H.R 1) H.# dx)
-               v
+    t = BBP.isoVar H.headTail
+                   (\(d, dx) -> (H.konst d :: H.R 1) H.# dx)
+                   v
     {-# NOINLINE t #-}
 {-# INLINE headTail #-}
 
@@ -338,7 +366,7 @@ splitRows
     -> (BVar s (H.L p n), BVar s (H.L (m - p) n))
 splitRows v = (t ^^. _1, t ^^. _2)
   where
-    t = isoVar (tupT2 . H.splitRows) (uncurryT2 (H.===)) v
+    t = BBP.isoVar H.splitRows (uncurry (H.===)) v
     {-# NOINLINE t #-}
 {-# INLINE splitRows #-}
 
@@ -348,7 +376,7 @@ splitCols
     -> (BVar s (H.L m p), BVar s (H.L m (n - p)))
 splitCols v = (t ^^. _1, t ^^. _2)
   where
-    t = isoVar (tupT2 . H.splitCols) (uncurryT2 (H.|||)) v
+    t = BBP.isoVar H.splitCols (uncurry (H.|||)) v
     {-# NOINLINE t #-}
 {-# INLINE splitCols #-}
 
@@ -443,17 +471,17 @@ svd_
     -> (BVar s (H.L m m), BVar s (H.R n), BVar s (H.L n n))
 svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
   where
-    o :: Op '[H.L m n] (T3 (H.L m m) (H.R n) (H.L n n))
+    o :: Op '[H.L m n] (H.L m m, H.R n, H.L n n)
     o = op1 $ \x ->
-        let (u, σ, v) = H.svd x
-        in  ( T3 u σ v
-            , \(T3 dU dΣ dV) ->
+        let msv@(u, _, v) = H.svd x
+        in  ( msv
+            , \(dU, dΣ, dV) ->
                     if H.norm_0 dU == 0 && H.norm_0 dV == 0
                       then (u H.<> H.diagR 0 dΣ) H.<> H.tr v
                       else error "svd_: Cannot backprop if U and V are used."
             )
     {-# INLINE o #-}
-    t = liftOp1 o r
+    t = BBP.liftOp1 o r
     {-# NOINLINE t #-}
 {-# INLINE svd_ #-}
 
@@ -473,19 +501,19 @@ eigensystem
     -> (BVar s (H.R n), BVar s (H.L n n))
 eigensystem u = (t ^^. _1, t ^^. _2)
   where
-    o :: Op '[H.Sym n] (T2 (H.R n) (H.L n n))
+    o :: Op '[H.Sym n] (H.R n, H.L n n)
     o = op1 $ \x ->
         let (l, v, vInv, vTr) = helpEigen x
             lRep = H.rowsL . SV.replicate $ l
             fMat = (1 - H.eye) * (lRep - H.tr lRep)
-        in  ( T2 l v
-            , \(T2 dL dV) -> unsafeCoerce $
+        in  ( (l, v)
+            , \(dL, dV) -> unsafeCoerce $
                        H.tr vInv
                   H.<> (H.diag dL + fMat * (vTr H.<> dV))
                   H.<> vTr
             )
     {-# INLINE o #-}
-    t = liftOp1 o u
+    t = BBP.liftOp1 o u
     {-# NOINLINE t #-}
 {-# INLINE eigensystem #-}
 
@@ -661,10 +689,10 @@ meanCov
 meanCov v = (t ^^. _1, t ^^. _2)
   where
     m = fromInteger $ natVal (Proxy @m)
-    t = ($ v) . liftOp1 . op1 $ \x ->
-        let (μ, σ) = H.meanCov x
-        in  ( T2 μ σ
-            , \(T2 dμ dσ) ->
+    t = ($ v) . BBP.liftOp1 . op1 $ \x ->
+        let ms@(μ, _) = H.meanCov x
+        in  ( ms
+            , \(dμ, dσ) ->
                 let gradMean = H.rowsL
                              . SV.replicate
                              $ (dμ / H.konst m)
@@ -999,23 +1027,25 @@ invlndet
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
+       , Backprop field
+       , Backprop (mat n n)
        )
     => BVar s (mat n n)
     -> (BVar s (mat n n), (BVar s field, BVar s field))
 invlndet v = (t ^^. _1, (t ^^. _2, t ^^. _3))
   where
-    o :: Op '[mat n n] (T3 (mat n n) field field)
+    o :: Op '[mat n n] (mat n n, field, field)
     o = op1 $ \x ->
       let (i,(ldet, s)) = H.invlndet x
           iTr           = H.tr i
-      in  ( T3 i ldet s
-          , \(T3 dI dLDet _) ->
+      in  ( (i, ldet, s)
+          , \(dI, dLDet, _) ->
                 let gradI    = - iTr `H.mul` dI `H.mul` iTr
                     gradLDet = H.konst dLDet * H.tr i
                 in  gradI + gradLDet
           )
     {-# INLINE o #-}
-    t = liftOp1 o v
+    t = BBP.liftOp1 o v
     {-# NOINLINE t #-}
 {-# INLINE invlndet #-}
 
@@ -1162,13 +1192,10 @@ extractM = liftOp1 . op1 $ \x ->
 {-# INLINE extractM #-}
 
 create
-    :: forall t s d q. (Reifies q W, H.Sized t s d, Num s, Num (d t))
+    :: forall t s d q. (Reifies q W, H.Sized t s d, Backprop s, Num (d t), Backprop (d t))
     => BVar q (d t)
     -> Maybe (BVar q s)
-create = unANum
-       . sequenceVar
-       . isoVar (ANum              . H.create)
-                (maybe 0 H.extract . unANum  )
+create = BBP.sequenceVar . BBP.isoVar H.create (maybe 0 H.extract)
 {-# INLINE create #-}
 
 

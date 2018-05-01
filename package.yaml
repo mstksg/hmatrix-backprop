@@ -1,5 +1,5 @@
 name:                hmatrix-backprop
-version:             0.1.2.0
+version:             0.1.2.1
 github:              "mstksg/hmatrix-backprop"
 license:             BSD3
 author:              "Justin Le"
@@ -18,7 +18,7 @@ category:            Math
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
 description: |
-    hmatrix operations lifted for backprop.
+    hmatrix operations lifted for backprop, along with orphan instances.
 
     Meant to act as a drop-in replacement to the API of
     Numeric.LinearAlgebra.Static.  Just change your imports, and your
@@ -33,7 +33,7 @@ ghc-options:
 - -Wredundant-constraints
 
 dependencies:
-- backprop >= 0.1.4
+- backprop >= 0.2
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
 - hmatrix-vector-sized >= 0.1.1
@@ -45,7 +45,6 @@ library:
   exposed-modules:
   - Numeric.LinearAlgebra.Static.Backprop
   dependencies:
-  - ANum >= 0.2
   - ghc-typelits-knownnat
   - ghc-typelits-natnormalise
   - vector
