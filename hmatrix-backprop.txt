@@ -4,7 +4,7 @@
 
 -- | hmatrix operations lifted for backprop
 --   
---   hmatrix operations lifted for backprop.
+--   hmatrix operations lifted for backprop, along with orphan instances.
 --   
 --   Meant to act as a drop-in replacement to the API of
 --   Numeric.LinearAlgebra.Static. Just change your imports, and your
@@ -13,12 +13,13 @@
 --   See README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
-@version 0.1.1.0
+@version 0.1.2.1
 
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
 --   and matrix operations based on blas/lapack) that allows its operations
---   to work with <a>backprop</a>.
+--   to work with <a>backprop</a>. Also provides orphan instances of
+--   <a>Backprop</a> for types in <a>Numeric.LinearAlgebra.Static</a>.
 --   
 --   In short, these functions are "lifted" to work with <a>BVar</a>s.
 --   
@@ -250,7 +251,7 @@ det :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized fiel
 
 -- | The inverse and the natural log of the determinant together. If you
 --   know you don't need the inverse, it is best to use <a>lndet</a>.
-invlndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
+invlndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n), Backprop field, Backprop (mat n n)) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
 
 -- | The natural log of the determinant.
 lndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
@@ -269,7 +270,7 @@ extractV :: forall t s q. (Reifies q W, Sized t s Vector, Num s, Konst t Int Vec
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
 extractM :: forall t s q. (Reifies q W, Sized t s Matrix, Num s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t)) => BVar q s -> BVar q (Matrix t)
-create :: forall t s d q. (Reifies q W, Sized t s d, Num s, Num (d t)) => BVar q (d t) -> Maybe (BVar q s)
+create :: forall t s d q. (Reifies q W, Sized t s d, Backprop s, Num (d t), Backprop (d t)) => BVar q (d t) -> Maybe (BVar q s)
 class Diag m d | m -> d
 takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
 data Sym (n :: Nat) :: Nat -> *
@@ -340,3 +341,8 @@ class Reifies k (s :: k) a | s -> a
 --   <a>W</a></tt> as a required constraint on <tt>s</tt> that allows
 --   backpropagation to work.
 data W :: *
+instance Numeric.Backprop.Class.Backprop (Internal.Static.R n)
+instance Numeric.Backprop.Class.Backprop (Internal.Static.C n)
+instance (GHC.TypeNats.KnownNat n, GHC.TypeNats.KnownNat m) => Numeric.Backprop.Class.Backprop (Internal.Static.L n m)
+instance (GHC.TypeNats.KnownNat n, GHC.TypeNats.KnownNat m) => Numeric.Backprop.Class.Backprop (Internal.Static.M n m)
+instance GHC.TypeNats.KnownNat n => Numeric.Backprop.Class.Backprop (Numeric.LinearAlgebra.Static.Sym n)
