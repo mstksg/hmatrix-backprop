@@ -43,6 +43,7 @@ dependencies:
 library:
   source-dirs: src
   exposed-modules:
+  - Numeric.LinearAlgebra.Backprop
   - Numeric.LinearAlgebra.Static.Backprop
   dependencies:
   - ghc-typelits-knownnat
