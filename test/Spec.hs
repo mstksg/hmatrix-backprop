@@ -11,7 +11,6 @@ import           Hedgehog
 import           Lens.Micro
 import           Nudge
 import           Numeric.Backprop
-import           Numeric.Backprop.Tuple
 import           Numeric.LinearAlgebra.Static          (L, R)
 import           System.Exit
 import           System.IO
@@ -21,11 +20,11 @@ prop_vec2 :: Property
 prop_vec2 = nudgeProp2 B.vec2
 
 prop_vec3 :: Property
-prop_vec3 = nudgeProp @(T3 Double Double Double)
+prop_vec3 = nudgeProp @(Double, Double, Double)
                 (\t -> B.vec3 (t ^^. _1) (t ^^. _2) (t ^^. _3))
 
 prop_vec4 :: Property
-prop_vec4 = nudgeProp2 @(T2 Double Double) @(T2 Double Double)
+prop_vec4 = nudgeProp2 @(Double, Double) @(Double, Double)
                 (\x y -> B.vec4 (x ^^. _1) (x ^^. _2) (y ^^. _1) (y ^^. _2))
 
 prop_snoc :: Property
