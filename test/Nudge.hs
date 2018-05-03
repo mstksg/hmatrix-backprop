@@ -117,7 +117,7 @@ instance (Testing a, Testing b) => Testing (a, b) where
                             )
     genTest = (,) <$> genTest <*> genTest
 
-instance (Testing a, Testing b, Testing c, Num a, Num b, Num c) => Testing (a, b, c) where
+instance (Testing a, Testing b, Testing c) => Testing (a, b, c) where
     type TIx (a, b, c) = Either (TIx a) (Either (TIx b) (TIx c))
     allIx (x, y, z) = (Left          <$> allIx x)
                    ++ (Right . Left  <$> allIx y)

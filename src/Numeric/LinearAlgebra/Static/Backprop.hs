@@ -207,6 +207,7 @@ import qualified Data.Vector.Generic.Sized           as SVG
 import qualified Data.Vector.Sized                   as SV
 import qualified Data.Vector.Storable.Sized          as SVS
 import qualified Numeric.Backprop                    as BBP
+import qualified Numeric.Backprop.Explicit           as BE
 import qualified Numeric.LinearAlgebra               as HU
 import qualified Numeric.LinearAlgebra.Static        as H
 import qualified Numeric.LinearAlgebra.Static.Vector as H
@@ -1132,16 +1133,16 @@ sumElements = liftOp1 . op1 $ \x ->
 -- If there are missing items, they are treated as zero.
 extractV
     :: forall t s q.
-       ( Reifies q W
-       , H.Sized t s HU.Vector
-       , Num s
+       ( H.Sized t s HU.Vector
        , HU.Konst t Int HU.Vector
        , HU.Container HU.Vector t
-       , Num (HU.Vector t)
+       , Backprop t
+       , Backprop s
+       , Reifies q W
        )
     => BVar q s
     -> BVar q (HU.Vector t)
-extractV = liftOp1 . op1 $ \x ->
+extractV = BBP.liftOp1 . op1 $ \x ->
     let n = H.size x
     in  ( H.extract x
         , \d -> let m  = HU.size d
@@ -1157,16 +1158,16 @@ extractV = liftOp1 . op1 $ \x ->
 -- If there are missing items, they are treated as zero.
 extractM
     :: forall t s q.
-       ( Reifies q W
-       , H.Sized t s HU.Matrix
-       , Num s
+       ( H.Sized t s HU.Matrix
+       , Backprop s
        , HU.Konst t (Int, Int) HU.Matrix
        , HU.Container HU.Matrix t
        , Num (HU.Matrix t)
+       , Reifies q W
        )
     => BVar q s
     -> BVar q (HU.Matrix t)
-extractM = liftOp1 . op1 $ \x ->
+extractM = BE.liftOp1 BE.addFunc (BE.ZF (HU.cmap (const 0))) . op1 $ \x ->  -- TODO: can be BBP once instances are in Numeric.LinearAlgebra.Backprop
     let (xI,xJ) = H.size x
     in  ( H.extract x
         , \d -> let (dI,dJ) = HU.size d
