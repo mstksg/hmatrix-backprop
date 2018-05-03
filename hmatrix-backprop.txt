@@ -265,11 +265,11 @@ sumElements :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) 
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractV :: forall t s q. (Reifies q W, Sized t s Vector, Num s, Konst t Int Vector, Container Vector t, Num (Vector t)) => BVar q s -> BVar q (Vector t)
+extractV :: forall t s q. (Sized t s Vector, Konst t Int Vector, Container Vector t, Backprop t, Backprop s, Reifies q W) => BVar q s -> BVar q (Vector t)
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractM :: forall t s q. (Reifies q W, Sized t s Matrix, Num s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t)) => BVar q s -> BVar q (Matrix t)
+extractM :: forall t s q. (Sized t s Matrix, Backprop s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t), Reifies q W) => BVar q s -> BVar q (Matrix t)
 create :: forall t s d q. (Reifies q W, Sized t s d, Backprop s, Num (d t), Backprop (d t)) => BVar q (d t) -> Maybe (BVar q s)
 class Diag m d | m -> d
 takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
