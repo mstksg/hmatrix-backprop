@@ -15,6 +15,27 @@
 @package hmatrix-backprop
 @version 0.1.2.1
 
+module Numeric.LinearAlgebra.Backprop
+dot :: (Numeric t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s t
+
+-- | Infix synonym for <a>dot</a>
+(<.>) :: (Numeric t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s t
+infixr 8 <.>
+(#>) :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Matrix t) -> BVar s (Vector t) -> BVar s (Vector t)
+infixr 8 #>
+(<#) :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Vector t) -> BVar s (Matrix t) -> BVar s (Vector t)
+infixr 8 <#
+(<>) :: (Reifies s W, Product t, Numeric t) => BVar s (Matrix t) -> BVar s (Matrix t) -> BVar s (Matrix t)
+infixr 8 <>
+outer :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s (Matrix t)
+kronecker :: (Reifies s W, Product t, Numeric t) => BVar s (Matrix t) -> BVar s (Matrix t) -> BVar s (Matrix t)
+
+-- | Only defined for inputs that are three-element vectors
+cross :: (Product t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s (Vector t)
+sumElements :: (Backprop e, Backprop (c e), Container c e, Konst e (IndexOf c) c, Reifies s W) => BVar s (c e) -> BVar s e
+flatten :: (Element t, Container Vector t, Num t, Backprop t, Reifies s W) => BVar s (Matrix t) -> BVar s (Vector t)
+instance (Internal.Numeric.Container Data.Vector.Storable.Vector a, GHC.Num.Num a) => Numeric.Backprop.Class.Backprop (Internal.Matrix.Matrix a)
+
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
 --   and matrix operations based on blas/lapack) that allows its operations
@@ -265,11 +286,11 @@ sumElements :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) 
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractV :: forall t s q. (Sized t s Vector, Konst t Int Vector, Container Vector t, Backprop t, Backprop s, Reifies q W) => BVar q s -> BVar q (Vector t)
+extractV :: forall t s q. (Reifies q W, Sized t s Vector, Num s, Konst t Int Vector, Container Vector t, Num (Vector t)) => BVar q s -> BVar q (Vector t)
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractM :: forall t s q. (Sized t s Matrix, Backprop s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t), Reifies q W) => BVar q s -> BVar q (Matrix t)
+extractM :: forall t s q. (Reifies q W, Sized t s Matrix, Num s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t)) => BVar q s -> BVar q (Matrix t)
 create :: forall t s d q. (Reifies q W, Sized t s d, Backprop s, Num (d t), Backprop (d t)) => BVar q (d t) -> Maybe (BVar q s)
 class Diag m d | m -> d
 takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
