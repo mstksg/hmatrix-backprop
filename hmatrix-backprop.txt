@@ -15,27 +15,6 @@
 @package hmatrix-backprop
 @version 0.1.2.1
 
-module Numeric.LinearAlgebra.Backprop
-dot :: (Numeric t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s t
-
--- | Infix synonym for <a>dot</a>
-(<.>) :: (Numeric t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s t
-infixr 8 <.>
-(#>) :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Matrix t) -> BVar s (Vector t) -> BVar s (Vector t)
-infixr 8 #>
-(<#) :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Vector t) -> BVar s (Matrix t) -> BVar s (Vector t)
-infixr 8 <#
-(<>) :: (Reifies s W, Product t, Numeric t) => BVar s (Matrix t) -> BVar s (Matrix t) -> BVar s (Matrix t)
-infixr 8 <>
-outer :: (Reifies s W, Product t, Numeric t, Backprop t) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s (Matrix t)
-kronecker :: (Reifies s W, Product t, Numeric t) => BVar s (Matrix t) -> BVar s (Matrix t) -> BVar s (Matrix t)
-
--- | Only defined for inputs that are three-element vectors
-cross :: (Product t, Backprop t, Reifies s W) => BVar s (Vector t) -> BVar s (Vector t) -> BVar s (Vector t)
-sumElements :: (Backprop e, Backprop (c e), Container c e, Konst e (IndexOf c) c, Reifies s W) => BVar s (c e) -> BVar s e
-flatten :: (Element t, Container Vector t, Num t, Backprop t, Reifies s W) => BVar s (Matrix t) -> BVar s (Vector t)
-instance (Internal.Numeric.Container Data.Vector.Storable.Vector a, GHC.Num.Num a) => Numeric.Backprop.Class.Backprop (Internal.Matrix.Matrix a)
-
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
 --   and matrix operations based on blas/lapack) that allows its operations
@@ -110,74 +89,74 @@ type ℝ = Double
 vec2 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s (R 2)
 vec3 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> BVar s (R 3)
 vec4 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> BVar s (R 4)
-(&) :: (Reifies s W, KnownNat n, 1 <= n, KnownNat (n + 1)) => BVar s (R n) -> BVar s ℝ -> BVar s (R (n + 1))
+(&) :: (KnownNat n, 1 <= n, KnownNat (n + 1), Reifies s W) => BVar s (R n) -> BVar s ℝ -> BVar s (R (n + 1))
 infixl 4 &
-(#) :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (R n) -> BVar s (R m) -> BVar s (R (n + m))
+(#) :: (KnownNat n, KnownNat m, Reifies s W) => BVar s (R n) -> BVar s (R m) -> BVar s (R (n + m))
 infixl 4 #
-split :: forall p n s. (Reifies s W, KnownNat p, KnownNat n, p <= n) => BVar s (R n) -> (BVar s (R p), BVar s (R (n - p)))
+split :: forall p n s. (KnownNat p, KnownNat n, p <= n, Reifies s W) => BVar s (R n) -> (BVar s (R p), BVar s (R (n - p)))
 headTail :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> (BVar s ℝ, BVar s (R (n - 1)))
 
 -- | Potentially extremely bad for anything but short lists!!!
-vector :: forall n s. (Reifies s W, KnownNat n) => Vector n (BVar s ℝ) -> BVar s (R n)
-linspace :: forall n s. (Reifies s W, KnownNat n) => BVar s ℝ -> BVar s ℝ -> BVar s (R n)
+vector :: forall n s. Reifies s W => Vector n (BVar s ℝ) -> BVar s (R n)
+linspace :: forall n s. (KnownNat n, Reifies s W) => BVar s ℝ -> BVar s ℝ -> BVar s (R n)
 range :: KnownNat n => R n
 dim :: KnownNat n => R n
 data L (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
 type Sq (n :: Nat) = L n n
-row :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (L 1 n)
-col :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (L n 1)
-(|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L c r1) -> BVar s (L c r2) -> BVar s (L c (r1 + r2))
+row :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (L 1 n)
+col :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (L n 1)
+(|||) :: (KnownNat c, KnownNat r1, KnownNat (r1 + r2), Reifies s W) => BVar s (L c r1) -> BVar s (L c r2) -> BVar s (L c (r1 + r2))
 infixl 3 |||
-(===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2)) => BVar s (L r1 c) -> BVar s (L r2 c) -> BVar s (L (r1 + r2) c)
+(===) :: (KnownNat c, KnownNat r1, KnownNat (r1 + r2), Reifies s W) => BVar s (L r1 c) -> BVar s (L r2 c) -> BVar s (L (r1 + r2) c)
 infixl 2 ===
-splitRows :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m) => BVar s (L m n) -> (BVar s (L p n), BVar s (L (m - p) n))
-splitCols :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n) => BVar s (L m n) -> (BVar s (L m p), BVar s (L m (n - p)))
-unrow :: (Reifies s W, KnownNat n) => BVar s (L 1 n) -> BVar s (R n)
-uncol :: (Reifies s W, KnownNat n) => BVar s (L n 1) -> BVar s (R n)
-tr :: (Reifies s W, Transposable m mt, Transposable mt m, Num m, Num mt) => BVar s m -> BVar s mt
+splitRows :: forall p m n s. (KnownNat p, KnownNat m, KnownNat n, p <= m, Reifies s W) => BVar s (L m n) -> (BVar s (L p n), BVar s (L (m - p) n))
+splitCols :: forall p m n s. (KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n, Reifies s W) => BVar s (L m n) -> (BVar s (L m p), BVar s (L m (n - p)))
+unrow :: (KnownNat n, Reifies s W) => BVar s (L 1 n) -> BVar s (R n)
+uncol :: (KnownNat n, Reifies s W) => BVar s (L n 1) -> BVar s (R n)
+tr :: (Transposable m mt, Transposable mt m, Backprop m, Backprop mt, Reifies s W) => BVar s m -> BVar s mt
 eye :: KnownNat n => Sq n
-diag :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (Sq n)
+diag :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (Sq n)
 
 -- | Potentially extremely bad for anything but short lists!!!
-matrix :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => [BVar s ℝ] -> BVar s (L m n)
+matrix :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => [BVar s ℝ] -> BVar s (L m n)
 type ℂ = Complex Double
 data C (n :: Nat) :: Nat -> *
 data M (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
 𝑖 :: Sized ℂ s c => s
 
 -- | Matrix product
-(<>) :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n) => BVar s (L m k) -> BVar s (L k n) -> BVar s (L m n)
+(<>) :: (KnownNat m, KnownNat k, KnownNat n, Reifies s W) => BVar s (L m k) -> BVar s (L k n) -> BVar s (L m n)
 infixr 8 <>
 
 -- | Matrix-vector product
-(#>) :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n) -> BVar s (R m)
+(#>) :: (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> BVar s (R n) -> BVar s (R m)
 infixr 8 #>
 
 -- | Dot product
-(<.>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
+(<.>) :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <.>
 
 -- | Can only get the singular values, for now. Let me know if you find an
 --   algorithm that can compute the gradients based on differentials for
 --   the other matricies!
-svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (R n)
+svd :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> BVar s (R n)
 
 -- | Version of <a>svd</a> that returns the full SVD, but if you attempt to
 --   find the gradient, it will fail at runtime if you ever use U or V.
-svd_ :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> (BVar s (L m m), BVar s (R n), BVar s (L n n))
+svd_ :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> (BVar s (L m m), BVar s (R n), BVar s (L n n))
 class Eigen m l v | m -> l, m -> v
 
 -- | <i>NOTE</i> The gradient is not necessarily symmetric! The gradient is
 --   not meant to be retireved directly; insteadl, <a>eigenvalues</a> is
 --   meant to be used as a part of a larger computation, and the gradient
 --   as an intermediate step.
-eigensystem :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> (BVar s (R n), BVar s (L n n))
+eigensystem :: forall n s. (KnownNat n, Reifies s W) => BVar s (Sym n) -> (BVar s (R n), BVar s (L n n))
 
 -- | <i>NOTE</i> The gradient is not necessarily symmetric! The gradient is
 --   not meant to be retireved directly; insteadl, <a>eigenvalues</a> is
 --   meant to be used as a part of a larger computation, and the gradient
 --   as an intermediate step.
-eigenvalues :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (R n)
+eigenvalues :: forall n s. (KnownNat n, Reifies s W) => BVar s (Sym n) -> BVar s (R n)
 
 -- | Algorithm from <a>https://arxiv.org/abs/1602.07527</a>
 --   
@@ -188,127 +167,127 @@ eigenvalues :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s
 --   not meant to be retireved directly; insteadl, <a>eigenvalues</a> is
 --   meant to be used as a part of a larger computation, and the gradient
 --   as an intermediate step.
-chol :: forall n s. (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
+chol :: forall n s. (KnownNat n, Reifies s W) => BVar s (Sym n) -> BVar s (Sq n)
 
 -- | p-norm for vectors, operator norm for matrices
 class Normed a
 
 -- | Number of non-zero items
-norm_0 :: (Reifies s W, Normed a, Num a) => BVar s a -> BVar s ℝ
+norm_0 :: (Normed a, Backprop a, Reifies s W) => BVar s a -> BVar s ℝ
 
 -- | Sum of absolute values
-norm_1V :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+norm_1V :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s ℝ
 
 -- | Maximum <a>norm_1</a> of columns
-norm_1M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
+norm_1M :: (KnownNat n, KnownNat m, Reifies s W) => BVar s (L n m) -> BVar s ℝ
 
 -- | Square root of sum of squares
 --   
 --   Be aware that gradient diverges when the norm is zero
-norm_2V :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+norm_2V :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s ℝ
 
 -- | Maximum singular value
-norm_2M :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
+norm_2M :: (KnownNat n, KnownNat m, Reifies s W) => BVar s (L n m) -> BVar s ℝ
 
 -- | Maximum absolute value
-norm_InfV :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s ℝ
+norm_InfV :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s ℝ
 
 -- | Maximum <a>norm_1</a> of rows
-norm_InfM :: (Reifies s W, KnownNat n, KnownNat m) => BVar s (L n m) -> BVar s ℝ
-mean :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> BVar s ℝ
+norm_InfM :: (KnownNat n, KnownNat m, Reifies s W) => BVar s (L n m) -> BVar s ℝ
+mean :: (KnownNat n, 1 <= n, Reifies s W) => BVar s (R n) -> BVar s ℝ
 
 -- | Mean and covariance. If you know you only want to use one or the
 --   other, use <a>meanL</a> or <a>cov</a>.
-meanCov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> (BVar s (R n), BVar s (Sym n))
+meanCov :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W) => BVar s (L m n) -> (BVar s (R n), BVar s (Sym n))
 
 -- | <a>meanCov</a>, but if you know you won't use the covariance.
-meanL :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> BVar s (R n)
+meanL :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W) => BVar s (L m n) -> BVar s (R n)
 
 -- | <a>cov</a>, but if you know you won't use the covariance.
-cov :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m) => BVar s (L m n) -> BVar s (Sym n)
+cov :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W) => BVar s (L m n) -> BVar s (Sym n)
 class Disp t
 disp :: Disp t => Int -> t -> IO ()
 class Domain field (vec :: Nat -> *) (mat :: Nat -> Nat -> *) | mat -> vec field, vec -> mat field, field -> mat vec
-mul :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n, Domain field vec mat, Num (mat m k), Num (mat k n), Num (mat m n), Transposable (mat m k) (mat k m), Transposable (mat k n) (mat n k)) => BVar s (mat m k) -> BVar s (mat k n) -> BVar s (mat m n)
-app :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Num (mat m n), Num (vec n), Num (vec m), Transposable (mat m n) (mat n m)) => BVar s (mat m n) -> BVar s (vec n) -> BVar s (vec m)
-dot :: (Reifies s W, KnownNat n, Domain field vec mat, Sized field (vec n) d, Num (vec n)) => BVar s (vec n) -> BVar s (vec n) -> BVar s field
-cross :: (Reifies s W, Domain field vec mat, Num (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
+mul :: (KnownNat m, KnownNat k, KnownNat n, Domain field vec mat, Backprop (mat m k), Backprop (mat k n), Backprop (mat m n), Transposable (mat m k) (mat k m), Transposable (mat k n) (mat n k), Reifies s W) => BVar s (mat m k) -> BVar s (mat k n) -> BVar s (mat m n)
+app :: (KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat m n) (mat n m), Backprop (mat m n), Backprop (vec n), Backprop (vec m), Reifies s W) => BVar s (mat m n) -> BVar s (vec n) -> BVar s (vec m)
+dot :: (KnownNat n, Domain field vec mat, Sized field (vec n) d, Num (vec n), Backprop (vec n), Backprop field, Reifies s W) => BVar s (vec n) -> BVar s (vec n) -> BVar s field
+cross :: (Domain field vec mat, Reifies s W, Backprop (vec 3)) => BVar s (vec 3) -> BVar s (vec 3) -> BVar s (vec 3)
 
 -- | Create matrix with diagonal, and fill with default entries
-diagR :: forall m n k field vec mat s. (Reifies s W, Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
+diagR :: forall m n k field vec mat s. (Domain field vec mat, Num (vec k), Num (mat m n), KnownNat m, KnownNat n, KnownNat k, Container Vector field, Sized field (mat m n) Matrix, Sized field (vec k) Vector, Backprop field, Backprop (vec k), Backprop (mat m n), Reifies s W) => BVar s field -> BVar s (vec k) -> BVar s (mat m n)
 
 -- | Note: if possible, use the potentially much more performant
 --   <a>vmap'</a>.
-vmap :: (Reifies s W, KnownNat n) => (BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n)
+vmap :: Reifies s W => (BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n)
 
 -- | <a>vmap</a>, but potentially more performant. Only usable if the
 --   mapped function does not depend on any external <a>BVar</a>s.
-vmap' :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
+vmap' :: (Num (vec n), Storable field, Sized field (vec n) Vector, Backprop (vec n), Backprop field, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | Note: Potentially less performant than <a>vmap'</a>.
-dvmap :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
+dvmap :: (KnownNat n, Domain field vec mat, Num (vec n), Backprop (vec n), Backprop field, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | Note: if possible, use the potentially much more performant
 --   <a>mmap'</a>.
-mmap :: (Reifies s W, KnownNat n, KnownNat m) => (BVar s ℝ -> BVar s ℝ) -> BVar s (L n m) -> BVar s (L n m)
+mmap :: (KnownNat n, KnownNat m, Reifies s W) => (BVar s ℝ -> BVar s ℝ) -> BVar s (L n m) -> BVar s (L n m)
 
 -- | <a>mmap</a>, but potentially more performant. Only usable if the
 --   mapped function does not depend on any external <a>BVar</a>s.
-mmap' :: forall n m mat field s. (Reifies s W, KnownNat m, Num (mat n m), Sized field (mat n m) Matrix, Element field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+mmap' :: forall n m mat field s. (KnownNat m, Num (mat n m), Backprop (mat n m), Backprop field, Sized field (mat n m) Matrix, Element field, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
 
 -- | Note: Potentially less performant than <a>mmap'</a>.
-dmmap :: (Reifies s W, KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
-outer :: (Reifies s W, KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Num (vec n), Num (vec m), Num (mat n m)) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
+dmmap :: (KnownNat n, KnownNat m, Domain field vec mat, Num (mat n m), Backprop (mat n m), Backprop field, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field) -> BVar s (mat n m) -> BVar s (mat n m)
+outer :: (KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat n m) (mat m n), Backprop (vec n), Backprop (vec m), Backprop (mat n m), Reifies s W) => BVar s (vec n) -> BVar s (vec m) -> BVar s (mat n m)
 
 -- | Note: if possible, use the potentially much more performant
 --   <a>zipWithVector'</a>.
-zipWithVector :: (Reifies s W, KnownNat n) => (BVar s ℝ -> BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n) -> BVar s (R n)
-zipWithVector' :: (Reifies s W, Num (vec n), Storable field, Sized field (vec n) Vector) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
+zipWithVector :: (KnownNat n, Reifies s W) => (BVar s ℝ -> BVar s ℝ -> BVar s ℝ) -> BVar s (R n) -> BVar s (R n) -> BVar s (R n)
+zipWithVector' :: (Num (vec n), Backprop (vec n), Storable field, Backprop field, Sized field (vec n) Vector, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
 
 -- | A version of <a>zipWithVector'</a> that is potentially less performant
 --   but is based on <a>zipWithVector</a> from <a>Domain</a>.
-dzipWithVector :: (Reifies s W, KnownNat n, Domain field vec mat, Num (vec n), Num field) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
-det :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
+dzipWithVector :: (KnownNat n, Domain field vec mat, Num (vec n), Backprop (vec n), Backprop field, Reifies s W) => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field) -> BVar s (vec n) -> BVar s (vec n) -> BVar s (vec n)
+det :: (KnownNat n, Num (mat n n), Backprop (mat n n), Backprop field, Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s field
 
 -- | The inverse and the natural log of the determinant together. If you
 --   know you don't need the inverse, it is best to use <a>lndet</a>.
-invlndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n), Backprop field, Backprop (mat n n)) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
+invlndet :: forall n mat field vec d s. (KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n), Backprop field, Backprop (mat n n), Reifies s W) => BVar s (mat n n) -> (BVar s (mat n n), (BVar s field, BVar s field))
 
 -- | The natural log of the determinant.
-lndet :: forall n mat field vec d s. (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s field
-inv :: (Reifies s W, KnownNat n, Num (mat n n), Domain field vec mat, Transposable (mat n n) (mat n n)) => BVar s (mat n n) -> BVar s (mat n n)
-toRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector m (BVar s (R n))
-toColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> Vector n (BVar s (R m))
-fromRows :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector m (BVar s (R n)) -> BVar s (L m n)
-fromColumns :: forall m n s. (Reifies s W, KnownNat m, KnownNat n) => Vector n (BVar s (R m)) -> BVar s (L m n)
-konst :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q t -> BVar q s
-sumElements :: forall t s d q. (Reifies q W, Sized t s d, Container d t, Num s) => BVar q s -> BVar q t
+lndet :: forall n mat field vec d s. (KnownNat n, Num (mat n n), Backprop (mat n n), Backprop field, Domain field vec mat, Sized field (mat n n) d, Transposable (mat n n) (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s field
+inv :: (KnownNat n, Num (mat n n), Backprop (mat n n), Domain field vec mat, Transposable (mat n n) (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s (mat n n)
+toRows :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> Vector m (BVar s (R n))
+toColumns :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> Vector n (BVar s (R m))
+fromRows :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => Vector m (BVar s (R n)) -> BVar s (L m n)
+fromColumns :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => Vector n (BVar s (R m)) -> BVar s (L m n)
+konst :: forall t s d q. (Sized t s d, Container d t, Backprop s, Backprop t, Reifies q W) => BVar q t -> BVar q s
+sumElements :: forall t s d q. (Sized t s d, Container d t, Backprop s, Backprop t, Reifies q W) => BVar q s -> BVar q t
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractV :: forall t s q. (Reifies q W, Sized t s Vector, Num s, Konst t Int Vector, Container Vector t, Num (Vector t)) => BVar q s -> BVar q (Vector t)
+extractV :: forall t s q. (Sized t s Vector, Konst t Int Vector, Container Vector t, Backprop t, Backprop s, Reifies q W) => BVar q s -> BVar q (Vector t)
 
 -- | If there are extra items in the total derivative, they are dropped. If
 --   there are missing items, they are treated as zero.
-extractM :: forall t s q. (Reifies q W, Sized t s Matrix, Num s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t)) => BVar q s -> BVar q (Matrix t)
-create :: forall t s d q. (Reifies q W, Sized t s d, Backprop s, Num (d t), Backprop (d t)) => BVar q (d t) -> Maybe (BVar q s)
+extractM :: forall t s q. (Sized t s Matrix, Backprop s, Konst t (Int, Int) Matrix, Container Matrix t, Num (Matrix t), Reifies q W) => BVar q s -> BVar q (Matrix t)
+create :: (Sized t s d, Backprop s, Num (d t), Backprop (d t), Reifies q W) => BVar q (d t) -> Maybe (BVar q s)
 class Diag m d | m -> d
-takeDiag :: (Reifies s W, KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num (vec n), Num (mat n n), Num field) => BVar s (mat n n) -> BVar s (vec n)
+takeDiag :: (KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num field, Backprop (vec n), Backprop (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s (vec n)
 data Sym (n :: Nat) :: Nat -> *
 
 -- | &lt;math&gt;
-sym :: (Reifies s W, KnownNat n) => BVar s (Sq n) -> BVar s (Sym n)
+sym :: (KnownNat n, Reifies s W) => BVar s (Sq n) -> BVar s (Sym n)
 
 -- | &lt;math&gt;
-mTm :: (Reifies s W, KnownNat m, KnownNat n) => BVar s (L m n) -> BVar s (Sym n)
+mTm :: (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> BVar s (Sym n)
 
 -- | Warning: the gradient is going necessarily symmetric, and so is
 --   <i>not</i> meant to be used directly. Rather, it is meant to be used
 --   in the middle (or at the end) of a longer computation.
-unSym :: (Reifies s W, KnownNat n) => BVar s (Sym n) -> BVar s (Sq n)
+unSym :: (KnownNat n, Reifies s W) => BVar s (Sym n) -> BVar s (Sq n)
 
 -- | Unicode synonym for <tt>&lt;.&gt;&gt;</tt>
-(<·>) :: (Reifies s W, KnownNat n) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
+(<·>) :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (R n) -> BVar s ℝ
 infixr 8 <·>
 
 -- | A <tt><a>BVar</a> s a</tt> is a value of type <tt>a</tt> that can be
@@ -337,10 +316,18 @@ infixr 8 <·>
 --   extract <i>all</i> targets inside a <a>BVar</a>, and <tt>.~~</tt>
 --   (<a>setVar</a>) to set and update values inside a <a>BVar</a>.
 --   
+--   If you have control over your data type definitions, you can also use
+--   <a>splitBV</a> and <a>joinBV</a> to manipulate data types by easily
+--   extracting fields out of a <a>BVar</a> of data types and creating
+--   <a>BVar</a>s of data types out of <a>BVar</a>s of their fields. See
+--   <a>Numeric.Backprop#hkd</a> for a tutorial on this use pattern.
+--   
 --   For more complex operations, libraries can provide functions on
 --   <a>BVar</a>s using <a>liftOp</a> and related functions. This is how
 --   you can create primitive functions that users can use to manipulate
---   your library's values.
+--   your library's values. See
+--   <a>https://github.com/mstksg/backprop/wiki/Equipping-your-Library-with-Backprop</a>
+--   for a detailed guide.
 --   
 --   For example, the <i>hmatrix</i> library has a matrix-vector
 --   multiplication function, <tt>#&gt; :: L m n -&gt; R n -&gt; L m</tt>.
@@ -353,6 +340,86 @@ infixr 8 <·>
 --   See <a>Numeric.Backprop#liftops</a> and documentation for
 --   <a>liftOp</a> for more information.
 data BVar s a :: Type -> * -> *
+
+-- | Class of values that can be backpropagated in general.
+--   
+--   For instances of <a>Num</a>, these methods can be given by
+--   <a>zeroNum</a>, <a>addNum</a>, and <a>oneNum</a>. There are also
+--   generic options given in <a>Numeric.Backprop.Class</a> for functors,
+--   <a>IsList</a> instances, and <a>Generic</a> instances.
+--   
+--   <pre>
+--   instance <a>Backprop</a> <a>Double</a> where
+--       <a>zero</a> = <a>zeroNum</a>
+--       <a>add</a> = <a>addNum</a>
+--       <a>one</a> = <a>oneNum</a>
+--   </pre>
+--   
+--   If you leave the body of an instance declaration blank, GHC Generics
+--   will be used to derive instances if the type has a single constructor
+--   and each field is an instance of <a>Backprop</a>.
+--   
+--   To ensure that backpropagation works in a sound way, should obey the
+--   laws:
+--   
+--   <ul>
+--   <li><i><i>identity</i></i></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><pre><a>add</a> x (<a>zero</a> y) = x</pre></li>
+--   <li><pre><a>add</a> (<a>zero</a> x) y = y</pre></li>
+--   </ul>
+--   
+--   Also implies preservation of information, making <tt><a>zipWith</a>
+--   (<a>+</a>)</tt> an illegal implementation for lists and vectors.
+--   
+--   This is only expected to be true up to potential "extra zeroes" in
+--   <tt>x</tt> and <tt>y</tt> in the result.
+--   
+--   <ul>
+--   <li><i><i>commutativity</i></i></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><pre><a>add</a> x y = <a>add</a> y x</pre></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><i><i>associativity</i></i></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><pre><a>add</a> x (<a>add</a> y z) = <a>add</a> (<a>add</a> x y)
+--   z</pre></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><i><i>idempotence</i></i></li>
+--   </ul>
+--   
+--   <ul>
+--   <li><pre><a>zero</a> <a>.</a> <a>zero</a> = <a>zero</a></pre></li>
+--   <li><pre><a>one</a> <a>.</a> <a>one</a> = <a>one</a></pre></li>
+--   </ul>
+--   
+--   Note that not all values in the backpropagation process needs all of
+--   these methods: Only the "final result" needs <a>one</a>, for example.
+--   These are all grouped under one typeclass for convenience in defining
+--   instances, and also to talk about sensible laws. For fine-grained
+--   control, use the "explicit" versions of library functions (for
+--   example, in <a>Numeric.Backprop.Explicit</a>) instead of
+--   <a>Backprop</a> based ones.
+--   
+--   This typeclass replaces the reliance on <a>Num</a> of the previous API
+--   (v0.1). <a>Num</a> is strictly more powerful than <a>Backprop</a>, and
+--   is a stronger constraint on types than is necessary for proper
+--   backpropagating. In particular, <a>fromInteger</a> is a problem for
+--   many types, preventing useful backpropagation for lists,
+--   variable-length vectors (like <a>Data.Vector</a>) and variable-size
+--   matrices from linear algebra libraries like <i>hmatrix</i> and
+--   <i>accelerate</i>.
+class Backprop a
 class Reifies k (s :: k) a | s -> a
 
 -- | An ephemeral Wengert Tape in the environment. Used internally to track
