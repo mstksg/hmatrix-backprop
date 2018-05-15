@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 0.1.2.2
+---------------
+
+*Unreleased*
+
+<https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.2.2>
+
+*   Rewrote most of *Numeric.LinearAlgebra.Static.Backprop* module to require
+    `Backprop` constraints on everything instead of `Num` constraints
+*   Re-ordered constraint orders on various functions.  *Potentially breaking
+    change* if TypeApplications are used.
+
 Version 0.1.2.1
 ---------------
 

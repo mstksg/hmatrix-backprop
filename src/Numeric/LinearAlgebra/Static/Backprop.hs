@@ -188,6 +188,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   --
   -- @since 0.1.1.0
   , BVar
+  , Backprop
   , Reifies
   , W
   ) where
@@ -198,20 +199,19 @@ import           Data.Proxy
 import           Foreign.Storable
 import           GHC.TypeLits
 import           Lens.Micro hiding                   ((&))
+import           Numeric.Backprop
 import           Numeric.Backprop.Class
-import           Numeric.Backprop.Num
 import           Unsafe.Coerce
 import qualified Data.Vector                         as V
 import qualified Data.Vector.Generic                 as VG
 import qualified Data.Vector.Generic.Sized           as SVG
 import qualified Data.Vector.Sized                   as SV
 import qualified Data.Vector.Storable.Sized          as SVS
-import qualified Numeric.Backprop                    as BBP
 import qualified Numeric.Backprop.Explicit           as BE
 import qualified Numeric.LinearAlgebra               as HU
 import qualified Numeric.LinearAlgebra.Static        as H
 import qualified Numeric.LinearAlgebra.Static.Vector as H
-import qualified Prelude.Backprop.Num                as B
+import qualified Prelude.Backprop                    as B
 
 #if MIN_VERSION_base(4,11,0)
 import           Prelude hiding               ((<>))
@@ -272,7 +272,7 @@ vec4 vX vY vZ vW = isoVarN
     (vX :< vY :< vZ :< vW :< Ø)
 {-# INLINE vec4 #-}
 
-(&) :: (Reifies s W, KnownNat n, 1 <= n, KnownNat (n + 1))
+(&) :: (KnownNat n, 1 <= n, KnownNat (n + 1), Reifies s W)
     => BVar s (H.R n)
     -> BVar s H.ℝ
     -> BVar s (H.R (n + 1))
@@ -280,7 +280,7 @@ vec4 vX vY vZ vW = isoVarN
 infixl 4 &
 {-# INLINE (&) #-}
 
-(#) :: (Reifies s W, KnownNat n, KnownNat m)
+(#) :: (KnownNat n, KnownNat m, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.R m)
     -> BVar s (H.R (n + m))
@@ -289,12 +289,12 @@ infixl 4 #
 {-# INLINE (#) #-}
 
 split
-    :: forall p n s. (Reifies s W, KnownNat p, KnownNat n, p <= n)
+    :: forall p n s. (KnownNat p, KnownNat n, p <= n, Reifies s W)
     => BVar s (H.R n)
     -> (BVar s (H.R p), BVar s (H.R (n - p)))
 split v = (t ^^. _1, t ^^. _2)
   where
-    t = BBP.isoVar H.split (uncurry (H.#)) v
+    t = isoVar H.split (uncurry (H.#)) v
     {-# NOINLINE t #-}
 {-# INLINE split #-}
 
@@ -304,7 +304,7 @@ headTail
     -> (BVar s H.ℝ, BVar s (H.R (n - 1)))
 headTail v = (t ^^. _1, t ^^. _2)
   where
-    t = BBP.isoVar H.headTail
+    t = isoVar H.headTail
                    (\(d, dx) -> (H.konst d :: H.R 1) H.# dx)
                    v
     {-# NOINLINE t #-}
@@ -312,15 +312,16 @@ headTail v = (t ^^. _1, t ^^. _2)
 
 -- | Potentially extremely bad for anything but short lists!!!
 vector
-    :: forall n s. (Reifies s W, KnownNat n)
+    :: forall n s. Reifies s W
     => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
-vector = isoVar (H.vecR . SVG.convert) (SVG.convert . H.rVec)
+vector = BE.isoVar afSV BE.zeroFunc
+            (H.vecR . SVG.convert) (SVG.convert . H.rVec)
        . collectVar
 {-# INLINE vector #-}
 
 linspace
-    :: forall n s. (Reifies s W, KnownNat n)
+    :: forall n s. (KnownNat n, Reifies s W)
     => BVar s H.ℝ
     -> BVar s H.ℝ
     -> BVar s (H.R n)
@@ -333,19 +334,19 @@ linspace = liftOp2 . op2 $ \l u ->
     )
 {-# INLINE linspace #-}
 
-row :: (Reifies s W, KnownNat n)
+row :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.L 1 n)
 row = isoVar H.row H.unrow
 {-# INLINE row #-}
 
-col :: (Reifies s W, KnownNat n)
+col :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.L n 1)
 col = isoVar H.col H.uncol
 {-# INLINE col #-}
 
-(|||) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2))
+(|||) :: (KnownNat c, KnownNat r1, KnownNat (r1 + r2), Reifies s W)
       => BVar s (H.L c r1)
       -> BVar s (H.L c r2)
       -> BVar s (H.L c (r1 + r2))
@@ -353,7 +354,7 @@ col = isoVar H.col H.uncol
 infixl 3 |||
 {-# INLINE (|||) #-}
 
-(===) :: (Reifies s W, KnownNat c, KnownNat r1, KnownNat (r1 + r2))
+(===) :: (KnownNat c, KnownNat r1, KnownNat (r1 + r2), Reifies s W)
       => BVar s (H.L r1        c)
       -> BVar s (H.L r2        c)
       -> BVar s (H.L (r1 + r2) c)
@@ -362,47 +363,47 @@ infixl 2 ===
 {-# INLINE (===) #-}
 
 splitRows
-    :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, p <= m)
+    :: forall p m n s. (KnownNat p, KnownNat m, KnownNat n, p <= m, Reifies s W)
     => BVar s (H.L m n)
     -> (BVar s (H.L p n), BVar s (H.L (m - p) n))
 splitRows v = (t ^^. _1, t ^^. _2)
   where
-    t = BBP.isoVar H.splitRows (uncurry (H.===)) v
+    t = isoVar H.splitRows (uncurry (H.===)) v
     {-# NOINLINE t #-}
 {-# INLINE splitRows #-}
 
 splitCols
-    :: forall p m n s. (Reifies s W, KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n)
+    :: forall p m n s. (KnownNat p, KnownNat m, KnownNat n, KnownNat (n - p), p <= n, Reifies s W)
     => BVar s (H.L m n)
     -> (BVar s (H.L m p), BVar s (H.L m (n - p)))
 splitCols v = (t ^^. _1, t ^^. _2)
   where
-    t = BBP.isoVar H.splitCols (uncurry (H.|||)) v
+    t = isoVar H.splitCols (uncurry (H.|||)) v
     {-# NOINLINE t #-}
 {-# INLINE splitCols #-}
 
 unrow
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.L 1 n)
     -> BVar s (H.R n)
 unrow = isoVar H.unrow H.row
 {-# INLINE unrow #-}
 
 uncol
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.L n 1)
     -> BVar s (H.R n)
 uncol = isoVar H.uncol H.col
 {-# INLINE uncol #-}
 
-tr  :: (Reifies s W, HU.Transposable m mt, HU.Transposable mt m, Num m, Num mt)
+tr  :: (HU.Transposable m mt, HU.Transposable mt m, Backprop m, Backprop mt, Reifies s W)
     => BVar s m
     -> BVar s mt
 tr = isoVar H.tr H.tr
 {-# INLINE tr #-}
 
 diag
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.Sq n)
 diag = liftOp1 . op1 $ \x -> (H.diag x, H.takeDiag)
@@ -410,17 +411,17 @@ diag = liftOp1 . op1 $ \x -> (H.diag x, H.takeDiag)
 
 -- | Potentially extremely bad for anything but short lists!!!
 matrix
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => [BVar s H.ℝ]
     -> BVar s (H.L m n)
 matrix = maybe (error "matrix: invalid number of elements")
-               (isoVar (H.vecL . SVG.convert) (SVG.convert . H.lVec) . collectVar)
+               (BE.isoVar afSV BE.zeroFunc (H.vecL . SVG.convert) (SVG.convert . H.lVec) . collectVar)
        . SV.fromList @(m * n)
 {-# INLINE matrix #-}
 
 -- | Matrix product
 (<>)
-    :: (Reifies s W, KnownNat m, KnownNat k, KnownNat n)
+    :: (KnownNat m, KnownNat k, KnownNat n, Reifies s W)
     => BVar s (H.L m k)
     -> BVar s (H.L k n)
     -> BVar s (H.L m n)
@@ -430,7 +431,7 @@ infixr 8 <>
 
 -- | Matrix-vector product
 (#>)
-    :: (Reifies s W, KnownNat m, KnownNat n)
+    :: (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> BVar s (H.R n)
     -> BVar s (H.R m)
@@ -440,7 +441,7 @@ infixr 8 #>
 
 -- | Dot product
 (<.>)
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.R n)
     -> BVar s H.ℝ
@@ -452,7 +453,7 @@ infixr 8 <.>
 -- algorithm that can compute the gradients based on differentials for the
 -- other matricies!
 --
-svd :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+svd :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> BVar s (H.R n)
 svd = liftOp1 . op1 $ \x ->
@@ -467,7 +468,7 @@ svd = liftOp1 . op1 $ \x ->
 -- | Version of 'svd' that returns the full SVD, but if you attempt to find
 -- the gradient, it will fail at runtime if you ever use U or V.
 svd_
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> (BVar s (H.L m m), BVar s (H.R n), BVar s (H.L n n))
 svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
@@ -482,7 +483,7 @@ svd_ r = (t ^^. _1, t ^^. _2, t ^^. _3)
                       else error "svd_: Cannot backprop if U and V are used."
             )
     {-# INLINE o #-}
-    t = BBP.liftOp1 o r
+    t = liftOp1 o r
     {-# NOINLINE t #-}
 {-# INLINE svd_ #-}
 
@@ -497,7 +498,7 @@ helpEigen x = (l, v, H.inv v, H.tr v)
 -- used as a part of a larger computation, and the gradient as an
 -- intermediate step.
 eigensystem
-    :: forall n s. (Reifies s W, KnownNat n)
+    :: forall n s. (KnownNat n, Reifies s W)
     => BVar s (H.Sym n)
     -> (BVar s (H.R n), BVar s (H.L n n))
 eigensystem u = (t ^^. _1, t ^^. _2)
@@ -514,7 +515,7 @@ eigensystem u = (t ^^. _1, t ^^. _2)
                   H.<> vTr
             )
     {-# INLINE o #-}
-    t = BBP.liftOp1 o u
+    t = liftOp1 o u
     {-# NOINLINE t #-}
 {-# INLINE eigensystem #-}
 
@@ -523,7 +524,7 @@ eigensystem u = (t ^^. _1, t ^^. _2)
 -- used as a part of a larger computation, and the gradient as an
 -- intermediate step.
 eigenvalues
-    :: forall n s. (Reifies s W, KnownNat n)
+    :: forall n s. (KnownNat n, Reifies s W)
     => BVar s (H.Sym n)
     -> BVar s (H.R n)
 eigenvalues = liftOp1 . op1 $ \x ->
@@ -544,7 +545,7 @@ eigenvalues = liftOp1 . op1 $ \x ->
 -- used as a part of a larger computation, and the gradient as an
 -- intermediate step.
 chol
-    :: forall n s. (Reifies s W, KnownNat n)
+    :: forall n s. (KnownNat n, Reifies s W)
     => BVar s (H.Sym n)
     -> BVar s (H.Sq n)
 chol = liftOp1 . op1 $ \x ->
@@ -563,15 +564,15 @@ chol = liftOp1 . op1 $ \x ->
 
 -- | Number of non-zero items
 norm_0
-    :: (Reifies s W, H.Normed a, Num a)
+    :: (H.Normed a, Backprop a, Reifies s W)
     => BVar s a
     -> BVar s H.ℝ
-norm_0 = liftOp1 . op1 $ \x -> (H.norm_0 x, const 0)
+norm_0 = liftOp1 . op1 $ \x -> (H.norm_0 x, const (zero x))
 {-# INLINE norm_0 #-}
 
 -- | Sum of absolute values
 norm_1V
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s H.ℝ
 norm_1V = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
@@ -579,7 +580,7 @@ norm_1V = liftOp1 . op1 $ \x -> (H.norm_1 x, (* signum x) . H.konst)
 
 -- | Maximum 'H.norm_1' of columns
 norm_1M
-    :: (Reifies s W, KnownNat n, KnownNat m)
+    :: (KnownNat n, KnownNat m, Reifies s W)
     => BVar s (H.L n m)
     -> BVar s H.ℝ
 norm_1M = liftOp1 . op1 $ \x ->
@@ -599,7 +600,7 @@ norm_1M = liftOp1 . op1 $ \x ->
 --
 -- Be aware that gradient diverges when the norm is zero
 norm_2V
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s H.ℝ
 norm_2V = liftOp1 . op1 $ \x ->
@@ -609,7 +610,7 @@ norm_2V = liftOp1 . op1 $ \x ->
 
 -- | Maximum singular value
 norm_2M
-    :: (Reifies s W, KnownNat n, KnownNat m)
+    :: (KnownNat n, KnownNat m, Reifies s W)
     => BVar s (H.L n m)
     -> BVar s H.ℝ
 norm_2M = liftOp1 . op1 $ \x ->
@@ -620,7 +621,7 @@ norm_2M = liftOp1 . op1 $ \x ->
 
 -- | Maximum absolute value
 norm_InfV
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s H.ℝ
 norm_InfV = liftOp1 . op1 $ \x ->
@@ -639,7 +640,7 @@ norm_InfV = liftOp1 . op1 $ \x ->
 
 -- | Maximum 'H.norm_1' of rows
 norm_InfM
-    :: (Reifies s W, KnownNat n, KnownNat m)
+    :: (KnownNat n, KnownNat m, Reifies s W)
     => BVar s (H.L n m)
     -> BVar s H.ℝ
 norm_InfM = liftOp1 . op1 $ \x ->
@@ -657,7 +658,7 @@ norm_InfM = liftOp1 . op1 $ \x ->
 {-# INLINE norm_InfM #-}
 
 mean
-    :: (Reifies s W, KnownNat n, 1 <= n)
+    :: (KnownNat n, 1 <= n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s H.ℝ
 mean = liftOp1 . op1 $ \x -> (H.mean x, H.konst . (/ H.norm_0 x))
@@ -684,13 +685,13 @@ gradCov x μ dσ = H.rowsL
 -- | Mean and covariance.  If you know you only want to use one or the
 -- other, use 'meanL' or 'cov'.
 meanCov
-    :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
+    :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W)
     => BVar s (H.L m n)
     -> (BVar s (H.R n), BVar s (H.Sym n))
 meanCov v = (t ^^. _1, t ^^. _2)
   where
     m = fromInteger $ natVal (Proxy @m)
-    t = ($ v) . BBP.liftOp1 . op1 $ \x ->
+    t = ($ v) . liftOp1 . op1 $ \x ->
         let ms@(μ, _) = H.meanCov x
         in  ( ms
             , \(dμ, dσ) ->
@@ -704,7 +705,7 @@ meanCov v = (t ^^. _1, t ^^. _2)
 
 -- | 'meanCov', but if you know you won't use the covariance.
 meanL
-    :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
+    :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W)
     => BVar s (H.L m n)
     -> BVar s (H.R n)
 meanL = liftOp1 . op1 $ \x ->
@@ -717,7 +718,7 @@ meanL = liftOp1 . op1 $ \x ->
 
 -- | 'cov', but if you know you won't use the covariance.
 cov
-    :: forall m n s. (Reifies s W, KnownNat n, KnownNat m, 1 <= m)
+    :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W)
     => BVar s (H.L m n)
     -> BVar s (H.Sym n)
 cov = liftOp1 . op1 $ \x ->
@@ -725,16 +726,16 @@ cov = liftOp1 . op1 $ \x ->
     in  (σ, gradCov x μ)
 {-# INLINE cov #-}
 
-mul :: ( Reifies s W
-       , KnownNat m
+mul :: ( KnownNat m
        , KnownNat k
        , KnownNat n
        , H.Domain field vec mat
-       , Num (mat m k)
-       , Num (mat k n)
-       , Num (mat m n)
+       , Backprop (mat m k)
+       , Backprop (mat k n)
+       , Backprop (mat m n)
        , HU.Transposable (mat m k) (mat k m)
        , HU.Transposable (mat k n) (mat n k)
+       , Reifies s W
        )
     => BVar s (mat m k)
     -> BVar s (mat k n)
@@ -745,14 +746,14 @@ mul = liftOp2 . op2 $ \x y ->
     )
 {-# INLINE mul #-}
 
-app :: ( Reifies s W
-       , KnownNat m
+app :: ( KnownNat m
        , KnownNat n
        , H.Domain field vec mat
-       , Num (mat m n)
-       , Num (vec n)
-       , Num (vec m)
        , HU.Transposable (mat m n) (mat n m)
+       , Backprop (mat m n)
+       , Backprop (vec n)
+       , Backprop (vec m)
+       , Reifies s W
        )
     => BVar s (mat m n)
     -> BVar s (vec n)
@@ -763,11 +764,13 @@ app = liftOp2 . op2 $ \xs y ->
     )
 {-# INLINE app #-}
 
-dot :: ( Reifies s W
-       , KnownNat n
+dot :: ( KnownNat n
        , H.Domain field vec mat
        , H.Sized field (vec n) d
        , Num (vec n)
+       , Backprop (vec n)
+       , Backprop field
+       , Reifies s W
        )
     => BVar s (vec n)
     -> BVar s (vec n)
@@ -780,9 +783,9 @@ dot = liftOp2 . op2 $ \x y ->
 {-# INLINE dot #-}
 
 cross
-    :: ( Reifies s W
-       , H.Domain field vec mat
-       , Num (vec 3)
+    :: ( H.Domain field vec mat
+       , Reifies s W
+       , Backprop (vec 3)
        )
     => BVar s (vec 3)
     -> BVar s (vec 3)
@@ -796,8 +799,7 @@ cross = liftOp2 . op2 $ \x y ->
 -- | Create matrix with diagonal, and fill with default entries
 diagR
     :: forall m n k field vec mat s.
-       ( Reifies s W
-       , H.Domain field vec mat
+       ( H.Domain field vec mat
        , Num (vec k)
        , Num (mat m n)
        , KnownNat m
@@ -806,6 +808,10 @@ diagR
        , HU.Container HU.Vector field
        , H.Sized field (mat m n) HU.Matrix
        , H.Sized field (vec k) HU.Vector
+       , Backprop field
+       , Backprop (vec k)
+       , Backprop (mat m n)
+       , Reifies s W
        )
     => BVar s field             -- ^ default value
     -> BVar s (vec k)           -- ^ diagonal
@@ -820,24 +826,26 @@ diagR = liftOp2 . op2 $ \c x ->
 
 -- | Note: if possible, use the potentially much more performant 'vmap''.
 vmap
-    :: ( Reifies s W
-       , KnownNat n
-       )
+    :: Reifies s W
     => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
-vmap f = isoVar (H.vecR . SVG.convert @V.Vector) (SVG.convert . H.rVec)
+vmap f = BE.isoVar afSV BE.zeroFunc
+            (H.vecR . SVG.convert @V.Vector) (SVG.convert . H.rVec)
        . B.fmap f
-       . isoVar (SVG.convert . H.rVec) (H.vecR . SVG.convert)
+       . BE.isoVar BE.addFunc BE.zfFunctor
+            (SVG.convert . H.rVec) (H.vecR . SVG.convert)
 {-# INLINE vmap #-}
 
 -- | 'vmap', but potentially more performant.  Only usable if the mapped
 -- function does not depend on any external 'BVar's.
 vmap'
-    :: ( Reifies s W
-       , Num (vec n)
+    :: ( Num (vec n)
        , Storable field
        , H.Sized field (vec n) HU.Vector
+       , Backprop (vec n)
+       , Backprop field
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
@@ -855,11 +863,12 @@ vmap' f = liftOp1 . op1 $ bimap (fromJust . H.create . VG.convert)
 
 -- | Note: Potentially less performant than 'vmap''.
 dvmap
-    :: ( Reifies s W
-       , KnownNat n
+    :: ( KnownNat n
        , H.Domain field vec mat
        , Num (vec n)
-       , Num field
+       , Backprop (vec n)
+       , Backprop field
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (vec n)
@@ -872,27 +881,28 @@ dvmap f = liftOp1 . op1 $ \x ->
 
 -- | Note: if possible, use the potentially much more performant 'mmap''.
 mmap
-    :: ( Reifies s W
-       , KnownNat n
-       , KnownNat m
-       )
+    :: (KnownNat n, KnownNat m, Reifies s W)
     => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.L n m)
     -> BVar s (H.L n m)
-mmap f = isoVar (H.vecL . SVG.convert @V.Vector) (SVG.convert . H.lVec)
+mmap f = BE.isoVar afSV BE.zeroFunc
+                (H.vecL . SVG.convert @V.Vector) (SVG.convert . H.lVec)
        . B.fmap f
-       . isoVar (SVG.convert . H.lVec) (H.vecL . SVG.convert)
+       . BE.isoVar BE.addFunc BE.zfFunctor
+                (SVG.convert . H.lVec) (H.vecL . SVG.convert)
 {-# INLINE mmap #-}
 
 -- | 'mmap', but potentially more performant.  Only usable if the mapped
 -- function does not depend on any external 'BVar's.
 mmap'
     :: forall n m mat field s.
-       ( Reifies s W
-       , KnownNat m
+       ( KnownNat m
        , Num (mat n m)
+       , Backprop (mat n m)
+       , Backprop field
        , H.Sized field (mat n m) HU.Matrix
        , HU.Element field
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
@@ -911,12 +921,13 @@ mmap' f = liftOp1 . op1 $ bimap (fromJust . H.create . HU.reshape m . VG.convert
 
 -- | Note: Potentially less performant than 'mmap''.
 dmmap
-    :: ( Reifies s W
-       , KnownNat n
+    :: ( KnownNat n
        , KnownNat m
        , H.Domain field vec mat
        , Num (mat n m)
-       , Num field
+       , Backprop (mat n m)
+       , Backprop field
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field)
     -> BVar s (mat n m)
@@ -928,14 +939,14 @@ dmmap f = liftOp1 . op1 $ \x ->
 {-# INLINE dmmap #-}
 
 outer
-    :: ( Reifies s W
-       , KnownNat m
+    :: ( KnownNat m
        , KnownNat n
        , H.Domain field vec mat
        , HU.Transposable (mat n m) (mat m n)
-       , Num (vec n)
-       , Num (vec m)
-       , Num (mat n m)
+       , Backprop (vec n)
+       , Backprop (vec m)
+       , Backprop (mat n m)
+       , Reifies s W
        )
     => BVar s (vec n)
     -> BVar s (vec m)
@@ -950,22 +961,28 @@ outer = liftOp2 . op2 $ \x y ->
 -- | Note: if possible, use the potentially much more performant
 -- 'zipWithVector''.
 zipWithVector
-    :: ( Reifies s W, KnownNat n )
+    :: (KnownNat n, Reifies s W)
     => (BVar s H.ℝ -> BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
-zipWithVector f x y = isoVar (H.vecR . SVG.convert) (SVG.convert . H.rVec)
+zipWithVector f x y = BE.isoVar afSV BE.zeroFunc
+                                    (H.vecR . SVG.convert)
+                                    (SVG.convert . H.rVec)
                     $ B.liftA2 @(SV.Vector _) f (iv x) (iv y)
   where
-    iv = isoVar (SVG.convert . H.rVec) (H.vecR . SVG.convert)
+    iv = BE.isoVar BE.addFunc BE.zfFunctor
+            (SVG.convert . H.rVec)
+            (H.vecR . SVG.convert)
 {-# INLINE zipWithVector #-}
 
 zipWithVector'
-    :: ( Reifies s W
-       , Num (vec n)
+    :: ( Num (vec n)
+       , Backprop (vec n)
        , Storable field
+       , Backprop field
        , H.Sized field (vec n) HU.Vector
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field)
     -> BVar s (vec n)
@@ -985,11 +1002,12 @@ zipWithVector' f = liftOp2 . op2 $ \(VG.convert.H.extract->x) (VG.convert.H.extr
 -- | A version of 'zipWithVector'' that is potentially less performant but
 -- is based on 'H.zipWithVector' from 'H.Domain'.
 dzipWithVector
-    :: ( Reifies s W
-       , KnownNat n
+    :: ( KnownNat n
        , H.Domain field vec mat
        , Num (vec n)
-       , Num field
+       , Backprop (vec n)
+       , Backprop field
+       , Reifies s W
        )
     => (forall s'. Reifies s' W => BVar s' field -> BVar s' field -> BVar s' field)
     -> BVar s (vec n)
@@ -1003,12 +1021,14 @@ dzipWithVector f = liftOp2 . op2 $ \x y ->
     )
 {-# INLINE dzipWithVector #-}
 
-det :: ( Reifies s W
-       , KnownNat n
+det :: ( KnownNat n
        , Num (mat n n)
+       , Backprop (mat n n)
+       , Backprop field
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
+       , Reifies s W
        )
     => BVar s (mat n n)
     -> BVar s field
@@ -1022,14 +1042,14 @@ det = liftOp1 . op1 $ \x ->
 -- know you don't need the inverse, it is best to use 'lndet'.
 invlndet
     :: forall n mat field vec d s.
-       ( Reifies s W
-       , KnownNat n
+       ( KnownNat n
        , Num (mat n n)
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
        , Backprop field
        , Backprop (mat n n)
+       , Reifies s W
        )
     => BVar s (mat n n)
     -> (BVar s (mat n n), (BVar s field, BVar s field))
@@ -1046,19 +1066,21 @@ invlndet v = (t ^^. _1, (t ^^. _2, t ^^. _3))
                 in  gradI + gradLDet
           )
     {-# INLINE o #-}
-    t = BBP.liftOp1 o v
+    t = liftOp1 o v
     {-# NOINLINE t #-}
 {-# INLINE invlndet #-}
 
 -- | The natural log of the determinant.
 lndet
     :: forall n mat field vec d s.
-       ( Reifies s W
-       , KnownNat n
+       ( KnownNat n
        , Num (mat n n)
+       , Backprop (mat n n)
+       , Backprop field
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
+       , Reifies s W
        )
     => BVar s (mat n n)
     -> BVar s field
@@ -1067,11 +1089,12 @@ lndet = liftOp1 . op1 $ \x ->
           in  (ldet, (* H.tr i) . H.konst)
 {-# INLINE lndet #-}
 
-inv :: ( Reifies s W
-       , KnownNat n
+inv :: ( KnownNat n
        , Num (mat n n)
+       , Backprop (mat n n)
        , H.Domain field vec mat
        , HU.Transposable (mat n n) (mat n n)
+       , Reifies s W
        )
     => BVar s (mat n n)
     -> BVar s (mat n n)
@@ -1082,35 +1105,41 @@ inv = liftOp1 . op1 $ \x ->
 {-# INLINE inv #-}
 
 toRows
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
-toRows = sequenceVar . isoVar H.lRows H.rowsL
+toRows = sequenceVar . BE.isoVar BE.addFunc BE.zfFunctor H.lRows H.rowsL
 {-# INLINE toRows #-}
 
 toColumns
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
-toColumns = sequenceVar . isoVar H.lCols H.colsL
+toColumns = sequenceVar . BE.isoVar BE.addFunc BE.zfFunctor H.lCols H.colsL
 {-# INLINE toColumns #-}
 
 fromRows
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
-fromRows = isoVar H.rowsL H.lRows . collectVar
+fromRows = BE.isoVar afSV BE.zeroFunc H.rowsL H.lRows . collectVar
 {-# INLINE fromRows #-}
 
 fromColumns
-    :: forall m n s. (Reifies s W, KnownNat m, KnownNat n)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => SV.Vector n (BVar s (H.R m))
     -> BVar s (H.L m n)
-fromColumns = isoVar H.colsL H.lCols . collectVar
+fromColumns = BE.isoVar afSV BE.zeroFunc H.colsL H.lCols . collectVar
 {-# INLINE fromColumns #-}
 
 konst
-    :: forall t s d q. (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
+    :: forall t s d q.
+     ( H.Sized t s d
+     , HU.Container d t
+     , Backprop s
+     , Backprop t
+     , Reifies q W
+     )
     => BVar q t
     -> BVar q s
 konst = liftOp1 . op1 $ \x ->
@@ -1120,7 +1149,13 @@ konst = liftOp1 . op1 $ \x ->
 {-# INLINE konst #-}
 
 sumElements
-    :: forall t s d q. (Reifies q W, H.Sized t s d, HU.Container d t, Num s)
+    :: forall t s d q.
+     ( H.Sized t s d
+     , HU.Container d t
+     , Backprop s
+     , Backprop t
+     , Reifies q W
+     )
     => BVar q s
     -> BVar q t
 sumElements = liftOp1 . op1 $ \x ->
@@ -1142,7 +1177,7 @@ extractV
        )
     => BVar q s
     -> BVar q (HU.Vector t)
-extractV = BBP.liftOp1 . op1 $ \x ->
+extractV = liftOp1 . op1 $ \x ->
     let n = H.size x
     in  ( H.extract x
         , \d -> let m  = HU.size d
@@ -1193,21 +1228,21 @@ extractM = BE.liftOp1 BE.addFunc (BE.ZF (HU.cmap (const 0))) . op1 $ \x ->  -- T
 {-# INLINE extractM #-}
 
 create
-    :: forall t s d q. (Reifies q W, H.Sized t s d, Backprop s, Num (d t), Backprop (d t))
+    :: (H.Sized t s d, Backprop s, Num (d t), Backprop (d t), Reifies q W)
     => BVar q (d t)
     -> Maybe (BVar q s)
-create = BBP.sequenceVar . BBP.isoVar H.create (maybe 0 H.extract)
+create = sequenceVar . isoVar H.create (maybe 0 H.extract)
 {-# INLINE create #-}
 
 
 takeDiag
-    :: ( Reifies s W
-       , KnownNat n
+    :: ( KnownNat n
        , H.Diag (mat n n) (vec n)
        , H.Domain field vec mat
-       , Num (vec n)
-       , Num (mat n n)
        , Num field
+       , Backprop (vec n)
+       , Backprop (mat n n)
+       , Reifies s W
        )
     => BVar s (mat n n)
     -> BVar s (vec n)
@@ -1221,7 +1256,7 @@ takeDiag = liftOp1 . op1 $ \x ->
 -- \[
 -- \frac{1}{2} (M + M^T)
 -- \]
-sym :: (Reifies s W, KnownNat n)
+sym :: (KnownNat n, Reifies s W)
     => BVar s (H.Sq n)
     -> BVar s (H.Sym n)
 sym = liftOp1 . op1 $ \x ->
@@ -1234,7 +1269,7 @@ sym = liftOp1 . op1 $ \x ->
 -- \[
 -- M^T M
 -- \]
-mTm :: (Reifies s W, KnownNat m, KnownNat n)
+mTm :: (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> BVar s (H.Sym n)
 mTm = liftOp1 . op1 $ \x ->
@@ -1247,7 +1282,7 @@ mTm = liftOp1 . op1 $ \x ->
 -- meant to be used directly.  Rather, it is meant to be used in the middle
 -- (or at the end) of a longer computation.
 unSym
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.Sym n)
     -> BVar s (H.Sq n)
 unSym = isoVar H.unSym unsafeCoerce
@@ -1255,10 +1290,14 @@ unSym = isoVar H.unSym unsafeCoerce
 
 -- | Unicode synonym for '<.>>'
 (<·>)
-    :: (Reifies s W, KnownNat n)
+    :: (KnownNat n, Reifies s W)
     => BVar s (H.R n)
     -> BVar s (H.R n)
     -> BVar s H.ℝ
 (<·>) = dot
 infixr 8 <·>
 {-# INLINE (<·>) #-}
+
+afSV :: Backprop a => BE.AddFunc (SV.Vector n a)
+afSV = BE.AF (SV.zipWith add)
+{-# INLINE afSV #-}
