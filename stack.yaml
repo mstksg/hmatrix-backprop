@@ -38,10 +38,10 @@ resolver: lts-11.0
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
-- location:
-    git: https://github.com/mstksg/backprop.git
-    commit: 5b6c299cccfe6abae9071a9884ebf92a3c880431
-  extra-dep: true
+# - location:
+#     git: https://github.com/mstksg/backprop.git
+#     commit: 1d0875a72cf903e574430ccfdffc505e7958f311
+#   extra-dep: true
 # - location:
 #     git: https://github.com/mstksg/type-combinators.git
 #     commit: 13e7d4bd99b1a80b5fdb436a85ee52cfa0ff799f
@@ -49,8 +49,8 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: []
-# - backprop-0.2.0.0
+extra-deps:
+- backprop-0.2.4.0
 # - hmatrix-vector-sized-0.1.1.0
 # - type-combinators-0.2.4.3
 

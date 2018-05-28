@@ -1,5 +1,5 @@
 name:                hmatrix-backprop
-version:             0.1.2.1
+version:             0.1.2.2
 github:              "mstksg/hmatrix-backprop"
 license:             BSD3
 author:              "Justin Le"
@@ -33,7 +33,7 @@ ghc-options:
 - -Wredundant-constraints
 
 dependencies:
-- backprop >= 0.2.3
+- backprop >= 0.2.4
 - base >= 4.7 && < 5
 - hmatrix >= 0.18
 - hmatrix-vector-sized >= 0.1.1

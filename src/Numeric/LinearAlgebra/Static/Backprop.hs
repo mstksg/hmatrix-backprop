@@ -194,6 +194,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
   ) where
 
 import           Data.Bifunctor
+import           Data.Coerce
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
@@ -315,7 +316,7 @@ vector
     :: forall n s. Reifies s W
     => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
-vector = BE.isoVar afSV BE.zeroFunc
+vector = BE.isoVar afSV
             (H.vecR . SVG.convert) (SVG.convert . H.rVec)
        . collectVar
 {-# INLINE vector #-}
@@ -334,7 +335,7 @@ linspace = liftOp2 . op2 $ \l u ->
     )
 {-# INLINE linspace #-}
 
-row :: (KnownNat n, Reifies s W)
+row :: Reifies s W
     => BVar s (H.R n)
     -> BVar s (H.L 1 n)
 row = isoVar H.row H.unrow
@@ -396,7 +397,7 @@ uncol
 uncol = isoVar H.uncol H.col
 {-# INLINE uncol #-}
 
-tr  :: (HU.Transposable m mt, HU.Transposable mt m, Backprop m, Backprop mt, Reifies s W)
+tr  :: (HU.Transposable m mt, HU.Transposable mt m, Backprop m, Reifies s W)
     => BVar s m
     -> BVar s mt
 tr = isoVar H.tr H.tr
@@ -415,7 +416,10 @@ matrix
     => [BVar s H.ℝ]
     -> BVar s (H.L m n)
 matrix = maybe (error "matrix: invalid number of elements")
-               (BE.isoVar afSV BE.zeroFunc (H.vecL . SVG.convert) (SVG.convert . H.lVec) . collectVar)
+               ( isoVar (H.vecL . SVG.convert . runABP) (ABP . SVG.convert . H.lVec)
+               . collectVar
+               . ABP
+               )
        . SV.fromList @(m * n)
 {-# INLINE matrix #-}
 
@@ -732,7 +736,6 @@ mul :: ( KnownNat m
        , H.Domain field vec mat
        , Backprop (mat m k)
        , Backprop (mat k n)
-       , Backprop (mat m n)
        , HU.Transposable (mat m k) (mat k m)
        , HU.Transposable (mat k n) (mat n k)
        , Reifies s W
@@ -752,7 +755,6 @@ app :: ( KnownNat m
        , HU.Transposable (mat m n) (mat n m)
        , Backprop (mat m n)
        , Backprop (vec n)
-       , Backprop (vec m)
        , Reifies s W
        )
     => BVar s (mat m n)
@@ -769,7 +771,6 @@ dot :: ( KnownNat n
        , H.Sized field (vec n) d
        , Num (vec n)
        , Backprop (vec n)
-       , Backprop field
        , Reifies s W
        )
     => BVar s (vec n)
@@ -810,7 +811,6 @@ diagR
        , H.Sized field (vec k) HU.Vector
        , Backprop field
        , Backprop (vec k)
-       , Backprop (mat m n)
        , Reifies s W
        )
     => BVar s field             -- ^ default value
@@ -826,15 +826,14 @@ diagR = liftOp2 . op2 $ \c x ->
 
 -- | Note: if possible, use the potentially much more performant 'vmap''.
 vmap
-    :: Reifies s W
+    :: (KnownNat n, Reifies s W)
     => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
-vmap f = BE.isoVar afSV BE.zeroFunc
-            (H.vecR . SVG.convert @V.Vector) (SVG.convert . H.rVec)
+vmap f = isoVar (H.vecR . SVG.convert @V.Vector . runABP)
+                (ABP . SVG.convert . H.rVec)
        . B.fmap f
-       . BE.isoVar BE.addFunc BE.zfFunctor
-            (SVG.convert . H.rVec) (H.vecR . SVG.convert)
+       . isoVar (ABP . SVG.convert . H.rVec) (H.vecR . SVG.convert . runABP)
 {-# INLINE vmap #-}
 
 -- | 'vmap', but potentially more performant.  Only usable if the mapped
@@ -885,11 +884,10 @@ mmap
     => (BVar s H.ℝ -> BVar s H.ℝ)
     -> BVar s (H.L n m)
     -> BVar s (H.L n m)
-mmap f = BE.isoVar afSV BE.zeroFunc
-                (H.vecL . SVG.convert @V.Vector) (SVG.convert . H.lVec)
+mmap f = isoVar (H.vecL . SVG.convert @V.Vector . runABP)
+                (ABP . SVG.convert . H.lVec)
        . B.fmap f
-       . BE.isoVar BE.addFunc BE.zfFunctor
-                (SVG.convert . H.lVec) (H.vecL . SVG.convert)
+       . isoVar (ABP . SVG.convert . H.lVec) (H.vecL . SVG.convert . runABP)
 {-# INLINE mmap #-}
 
 -- | 'mmap', but potentially more performant.  Only usable if the mapped
@@ -945,7 +943,6 @@ outer
        , HU.Transposable (mat n m) (mat m n)
        , Backprop (vec n)
        , Backprop (vec m)
-       , Backprop (mat n m)
        , Reifies s W
        )
     => BVar s (vec n)
@@ -966,14 +963,11 @@ zipWithVector
     -> BVar s (H.R n)
     -> BVar s (H.R n)
     -> BVar s (H.R n)
-zipWithVector f x y = BE.isoVar afSV BE.zeroFunc
-                                    (H.vecR . SVG.convert)
-                                    (SVG.convert . H.rVec)
-                    $ B.liftA2 @(SV.Vector _) f (iv x) (iv y)
+zipWithVector f x y = isoVar (H.vecR . SVG.convert . runABP)
+                             (ABP . SVG.convert . H.rVec)
+                    $ B.liftA2 @(ABP (SV.Vector _)) f (iv x) (iv y)
   where
-    iv = BE.isoVar BE.addFunc BE.zfFunctor
-            (SVG.convert . H.rVec)
-            (H.vecR . SVG.convert)
+    iv = isoVar (ABP . SVG.convert . H.rVec) (H.vecR . SVG.convert . runABP)
 {-# INLINE zipWithVector #-}
 
 zipWithVector'
@@ -1024,7 +1018,6 @@ dzipWithVector f = liftOp2 . op2 $ \x y ->
 det :: ( KnownNat n
        , Num (mat n n)
        , Backprop (mat n n)
-       , Backprop field
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
@@ -1076,7 +1069,6 @@ lndet
        ( KnownNat n
        , Num (mat n n)
        , Backprop (mat n n)
-       , Backprop field
        , H.Domain field vec mat
        , H.Sized field (mat n n) d
        , HU.Transposable (mat n n) (mat n n)
@@ -1108,35 +1100,34 @@ toRows
     :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
-toRows = sequenceVar . BE.isoVar BE.addFunc BE.zfFunctor H.lRows H.rowsL
+toRows = runABP . sequenceVar . isoVar (coerce H.lRows) (coerce H.rowsL)
 {-# INLINE toRows #-}
 
 toColumns
     :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
-toColumns = sequenceVar . BE.isoVar BE.addFunc BE.zfFunctor H.lCols H.colsL
+toColumns = runABP . sequenceVar . isoVar (coerce H.lCols) (coerce H.colsL)
 {-# INLINE toColumns #-}
 
 fromRows
-    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
+    :: forall m n s. (KnownNat m, Reifies s W)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
-fromRows = BE.isoVar afSV BE.zeroFunc H.rowsL H.lRows . collectVar
+fromRows = isoVar (coerce H.rowsL) (coerce H.lRows) . collectVar . ABP
 {-# INLINE fromRows #-}
 
 fromColumns
-    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
+    :: forall m n s. (KnownNat n, Reifies s W)
     => SV.Vector n (BVar s (H.R m))
     -> BVar s (H.L m n)
-fromColumns = BE.isoVar afSV BE.zeroFunc H.colsL H.lCols . collectVar
+fromColumns = isoVar (coerce H.colsL) (coerce H.lCols) . collectVar . ABP
 {-# INLINE fromColumns #-}
 
 konst
     :: forall t s d q.
      ( H.Sized t s d
      , HU.Container d t
-     , Backprop s
      , Backprop t
      , Reifies q W
      )
@@ -1153,7 +1144,6 @@ sumElements
      ( H.Sized t s d
      , HU.Container d t
      , Backprop s
-     , Backprop t
      , Reifies q W
      )
     => BVar q s
@@ -1171,7 +1161,6 @@ extractV
        ( H.Sized t s HU.Vector
        , HU.Konst t Int HU.Vector
        , HU.Container HU.Vector t
-       , Backprop t
        , Backprop s
        , Reifies q W
        )
@@ -1202,7 +1191,7 @@ extractM
        )
     => BVar q s
     -> BVar q (HU.Matrix t)
-extractM = BE.liftOp1 BE.addFunc (BE.ZF (HU.cmap (const 0))) . op1 $ \x ->  -- TODO: can be BBP once instances are in Numeric.LinearAlgebra.Backprop
+extractM = liftOp1 . op1 $ \x ->
     let (xI,xJ) = H.size x
     in  ( H.extract x
         , \d -> let (dI,dJ) = HU.size d
@@ -1240,7 +1229,6 @@ takeDiag
        , H.Diag (mat n n) (vec n)
        , H.Domain field vec mat
        , Num field
-       , Backprop (vec n)
        , Backprop (mat n n)
        , Reifies s W
        )
