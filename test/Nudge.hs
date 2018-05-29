@@ -10,7 +10,10 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module Nudge where
+module Nudge (
+    nudgeProp
+  , nudgeProp2
+  ) where
 
 import           Control.Monad
 import           Data.Bifunctor
@@ -177,6 +180,7 @@ nudgeProp2 f = property $ do
     assert $ ((old - new)/old)**2 < eps
 
 instance (HU.Container HU.Vector a, Num a) => Backprop (HU.Matrix a) where
+    -- TODO: make more efficient?
     zero = HU.cmap (const 0)
     add  = HU.add
     one  = HU.cmap (const 1)

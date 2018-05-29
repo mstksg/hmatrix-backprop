@@ -13,6 +13,7 @@ Version 0.1.2.2
     `Backprop` constraints on everything instead of `Num` constraints
 *   Re-ordered constraint orders on various functions.  *Potentially breaking
     change* if TypeApplications are used.
+*   Removed redundant dependency on *finite-typelits*.
 
 Version 0.1.2.1
 ---------------

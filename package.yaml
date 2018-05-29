@@ -48,7 +48,6 @@ library:
   - ghc-typelits-knownnat
   - ghc-typelits-natnormalise
   - vector
-  - finite-typelits
 
 tests:
   hmatrix-backprop-test:
