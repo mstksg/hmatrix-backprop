@@ -195,6 +195,7 @@ module Numeric.LinearAlgebra.Static.Backprop (
 
 import           Data.Bifunctor
 import           Data.Coerce
+import           Data.Functor.Identity
 import           Data.Maybe
 import           Data.Proxy
 import           Foreign.Storable
@@ -268,9 +269,14 @@ vec4
     -> BVar s H.ℝ
     -> BVar s (H.R 4)
 vec4 vX vY vZ vW = isoVarN
-    (\(x ::< y ::< z ::< w ::< Ø) -> H.vec4 x y z w)
-    (\(H.rVec->v) -> SVS.index v 0 ::< SVS.index v 1 ::< SVS.index v 2 ::< SVS.index v 3 ::< Ø)
-    (vX :< vY :< vZ :< vW :< Ø)
+    (\(Identity x :& Identity y :& Identity z :& Identity w :& RNil) -> H.vec4 x y z w)
+    (\(H.rVec->v) -> Identity (SVS.index v 0)
+                  :& Identity (SVS.index v 1)
+                  :& Identity (SVS.index v 2)
+                  :& Identity (SVS.index v 3)
+                  :& RNil
+    )
+    (vX :& vY :& vZ :& vW :& RNil)
 {-# INLINE vec4 #-}
 
 (&) :: (KnownNat n, 1 <= n, KnownNat (n + 1), Reifies s W)

@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.2.3
+---------------
+
+*June 19, 2018*
+
+<https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.2.3>
+
+*   Fix compatibility with *backprop-0.2.5.0*
+
 Version 0.1.2.2
 ---------------
 
