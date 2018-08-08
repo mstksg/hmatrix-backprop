@@ -43,8 +43,11 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - backprop-0.2.6.1
+- distributive-0.6
 - finite-typelits-0.1.4.2
+- hedgehog-0.6
 - hmatrix-vector-sized-0.1.1.0
+- indexed-list-literals-0.2.1.1
 - vector-sized-1.0.4.0
 - vinyl-0.9.1
 
