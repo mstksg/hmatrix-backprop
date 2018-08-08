@@ -1,5 +1,5 @@
 name:                hmatrix-backprop
-version:             0.1.2.3
+version:             0.1.2.4
 github:              "mstksg/hmatrix-backprop"
 license:             BSD3
 author:              "Justin Le"
@@ -39,6 +39,7 @@ dependencies:
 - hmatrix-vector-sized >= 0.1.1
 - microlens
 - vector-sized >= 0.6
+- vinyl >= 0.9
 
 library:
   source-dirs: src

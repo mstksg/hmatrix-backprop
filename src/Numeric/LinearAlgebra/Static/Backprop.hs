@@ -198,6 +198,7 @@ import           Data.Coerce
 import           Data.Functor.Identity
 import           Data.Maybe
 import           Data.Proxy
+import           Data.Vinyl                          (Rec(..))
 import           Foreign.Storable
 import           GHC.TypeLits
 import           Lens.Micro hiding                   ((&))
