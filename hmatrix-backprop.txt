@@ -13,7 +13,7 @@
 --   See README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
-@version 0.1.2.2
+@version 0.1.2.4
 
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
@@ -84,7 +84,7 @@
 --   existential types, with <a>fromRows</a> and <a>fromColumns</a>.</li>
 --   </ul>
 module Numeric.LinearAlgebra.Static.Backprop
-data R (n :: Nat) :: Nat -> *
+data R (n :: Nat)
 type ℝ = Double
 vec2 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s (R 2)
 vec3 :: Reifies s W => BVar s ℝ -> BVar s ℝ -> BVar s ℝ -> BVar s (R 3)
@@ -101,7 +101,7 @@ vector :: forall n s. Reifies s W => Vector n (BVar s ℝ) -> BVar s (R n)
 linspace :: forall n s. (KnownNat n, Reifies s W) => BVar s ℝ -> BVar s ℝ -> BVar s (R n)
 range :: KnownNat n => R n
 dim :: KnownNat n => R n
-data L (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
+data L (m :: Nat) (n :: Nat)
 type Sq (n :: Nat) = L n n
 row :: Reifies s W => BVar s (R n) -> BVar s (L 1 n)
 col :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (L n 1)
@@ -120,8 +120,8 @@ diag :: (KnownNat n, Reifies s W) => BVar s (R n) -> BVar s (Sq n)
 -- | Potentially extremely bad for anything but short lists!!!
 matrix :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => [BVar s ℝ] -> BVar s (L m n)
 type ℂ = Complex Double
-data C (n :: Nat) :: Nat -> *
-data M (m :: Nat) (n :: Nat) :: Nat -> Nat -> *
+data C (n :: Nat)
+data M (m :: Nat) (n :: Nat)
 𝑖 :: Sized ℂ s c => s
 
 -- | Matrix product
@@ -273,7 +273,7 @@ extractM :: forall t s q. (Sized t s Matrix, Backprop s, Konst t (Int, Int) Matr
 create :: (Sized t s d, Backprop s, Num (d t), Backprop (d t), Reifies q W) => BVar q (d t) -> Maybe (BVar q s)
 class Diag m d | m -> d
 takeDiag :: (KnownNat n, Diag (mat n n) (vec n), Domain field vec mat, Num field, Backprop (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s (vec n)
-data Sym (n :: Nat) :: Nat -> *
+data Sym (n :: Nat)
 
 -- | &lt;math&gt;
 sym :: (KnownNat n, Reifies s W) => BVar s (Sq n) -> BVar s (Sym n)
@@ -339,7 +339,7 @@ infixr 8 <·>
 --   
 --   See <a>Numeric.Backprop#liftops</a> and documentation for
 --   <a>liftOp</a> for more information.
-data BVar s a :: Type -> * -> *
+data BVar s a
 
 -- | Class of values that can be backpropagated in general.
 --   
@@ -428,7 +428,7 @@ data BVar s a :: Type -> * -> *
 --   matrices from linear algebra libraries like <i>hmatrix</i> and
 --   <i>accelerate</i>.
 class Backprop a
-class Reifies k (s :: k) a | s -> a
+class Reifies (s :: k) a | s -> a
 
 -- | An ephemeral Wengert Tape in the environment. Used internally to track
 --   of the computational graph of variables.
@@ -436,7 +436,7 @@ class Reifies k (s :: k) a | s -> a
 --   For the end user, one can just imagine <tt><a>Reifies</a> s
 --   <a>W</a></tt> as a required constraint on <tt>s</tt> that allows
 --   backpropagation to work.
-data W :: *
+data W
 instance Numeric.Backprop.Class.Backprop (Internal.Static.R n)
 instance Numeric.Backprop.Class.Backprop (Internal.Static.C n)
 instance (GHC.TypeNats.KnownNat n, GHC.TypeNats.KnownNat m) => Numeric.Backprop.Class.Backprop (Internal.Static.L n m)
