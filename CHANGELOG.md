@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.2.5
+---------------
+
+*November 14, 2018*
+
+<https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.2.5>
+
+*   Fix compatibility with GHC 8.6
+
 Version 0.1.2.4
 ---------------
 

@@ -12,6 +12,11 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise       #-}
 
+#if MIN_VERSION_base(4,12,0)
+{-# LANGUAGE NoStarIsType #-}
+#endif
+
+
 -- |
 -- Module      : Numeric.LinearAlgebra.Static.Backprop
 -- Copyright   : (c) Justin Le 2018
