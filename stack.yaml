@@ -50,6 +50,11 @@ extra-deps:
 - vector-sized-1.1.1.0
 - vinyl-0.10.0
 
+build:
+  haddock-arguments:
+    haddock-args:
+    - --optghc=-fdefer-type-errors
+
 # Override default flag values for local packages and extra-deps
 # flags: {}
 
