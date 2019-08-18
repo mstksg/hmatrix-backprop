@@ -13,7 +13,7 @@
 --   See README on Github at
 --   <a>https://github.com/mstksg/hmatrix-backprop#readme</a>
 @package hmatrix-backprop
-@version 0.1.2.4
+@version 0.1.3.0
 
 
 -- | A wrapper over <a>Numeric.LinearAlgebra.Static</a> (type-safe vector
@@ -97,7 +97,7 @@ split :: forall p n s. (KnownNat p, KnownNat n, p <= n, Reifies s W) => BVar s (
 headTail :: (Reifies s W, KnownNat n, 1 <= n) => BVar s (R n) -> (BVar s ℝ, BVar s (R (n - 1)))
 
 -- | Potentially extremely bad for anything but short lists!!!
-vector :: forall n s. Reifies s W => Vector n (BVar s ℝ) -> BVar s (R n)
+vector :: forall n s. (KnownNat n, Reifies s W) => Vector n (BVar s ℝ) -> BVar s (R n)
 linspace :: forall n s. (KnownNat n, Reifies s W) => BVar s ℝ -> BVar s ℝ -> BVar s (R n)
 range :: KnownNat n => R n
 dim :: KnownNat n => R n
@@ -207,7 +207,7 @@ meanL :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W) => BVar s (
 cov :: forall m n s. (KnownNat n, KnownNat m, 1 <= m, Reifies s W) => BVar s (L m n) -> BVar s (Sym n)
 class Disp t
 disp :: Disp t => Int -> t -> IO ()
-class Domain field (vec :: Nat -> *) (mat :: Nat -> Nat -> *) | mat -> vec field, vec -> mat field, field -> mat vec
+class Domain field (vec :: Nat -> Type) (mat :: Nat -> Nat -> Type) | mat -> vec field, vec -> mat field, field -> mat vec
 mul :: (KnownNat m, KnownNat k, KnownNat n, Domain field vec mat, Backprop (mat m k), Backprop (mat k n), Transposable (mat m k) (mat k m), Transposable (mat k n) (mat n k), Reifies s W) => BVar s (mat m k) -> BVar s (mat k n) -> BVar s (mat m n)
 app :: (KnownNat m, KnownNat n, Domain field vec mat, Transposable (mat m n) (mat n m), Backprop (mat m n), Backprop (vec n), Reifies s W) => BVar s (mat m n) -> BVar s (vec n) -> BVar s (vec m)
 dot :: (KnownNat n, Domain field vec mat, Sized field (vec n) d, Num (vec n), Backprop (vec n), Reifies s W) => BVar s (vec n) -> BVar s (vec n) -> BVar s field
@@ -258,8 +258,8 @@ lndet :: forall n mat field vec d s. (KnownNat n, Num (mat n n), Backprop (mat n
 inv :: (KnownNat n, Num (mat n n), Backprop (mat n n), Domain field vec mat, Transposable (mat n n) (mat n n), Reifies s W) => BVar s (mat n n) -> BVar s (mat n n)
 toRows :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> Vector m (BVar s (R n))
 toColumns :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => BVar s (L m n) -> Vector n (BVar s (R m))
-fromRows :: forall m n s. (KnownNat m, Reifies s W) => Vector m (BVar s (R n)) -> BVar s (L m n)
-fromColumns :: forall m n s. (KnownNat n, Reifies s W) => Vector n (BVar s (R m)) -> BVar s (L m n)
+fromRows :: forall m n s. (KnownNat m, KnownNat n, Reifies s W) => Vector m (BVar s (R n)) -> BVar s (L m n)
+fromColumns :: forall m n s. (KnownNat n, KnownNat m, Reifies s W) => Vector n (BVar s (R m)) -> BVar s (L m n)
 konst :: forall t s d q. (Sized t s d, Container d t, Backprop t, Reifies q W) => BVar q t -> BVar q s
 sumElements :: forall t s d q. (Sized t s d, Container d t, Backprop s, Reifies q W) => BVar q s -> BVar q t
 
