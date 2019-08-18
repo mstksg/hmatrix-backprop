@@ -45,7 +45,7 @@ extra-deps:
 - backprop-0.2.6.1
 - finite-typelits-0.1.4.2
 - hedgehog-0.6.1
-- hmatrix-vector-sized-0.1.1.2
+- hmatrix-vector-sized-0.1.2.0
 - indexed-list-literals-0.2.1.2
 - vector-sized-1.1.1.0
 - vinyl-0.10.0

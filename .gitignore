@@ -1,3 +1,5 @@
 .stack-work/
 hmatrix-backprop.cabal
 *~
+.ghc.environment*
+dist-newstyle/

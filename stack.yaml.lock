@@ -26,12 +26,12 @@ packages:
   original:
     hackage: hedgehog-0.6.1
 - completed:
-    hackage: hmatrix-vector-sized-0.1.1.2@sha256:ecdcdcd3dc94d9e9d4cc08477cc8f02c8ba17aa6ed54d339e0c0f566cad57639,1881
+    hackage: hmatrix-vector-sized-0.1.2.0@sha256:5b13ea0d371c54293e8a2159d3cea1f1466b8908331e1a1956c26b8732ca67a3,1881
     pantry-tree:
-      size: 400
-      sha256: bd86e151d1a0b20a2bebe54955486b636521b17f8deeea03dd88feceb4f1aec6
+      size: 402
+      sha256: 38bbeddbc873627d95d789a55d12104e8fe376f80cf9ae3ef3ca4ca282e5b177
   original:
-    hackage: hmatrix-vector-sized-0.1.1.2
+    hackage: hmatrix-vector-sized-0.1.2.0
 - completed:
     hackage: indexed-list-literals-0.2.1.2@sha256:0760e2a86605b5557af7180d4d50e317d75a5a92ca12aaabb6948ce97b7a94ac,2373
     pantry-tree:

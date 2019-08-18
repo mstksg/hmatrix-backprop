@@ -325,7 +325,7 @@ headTail v = (t ^^. _1, t ^^. _2)
 
 -- | Potentially extremely bad for anything but short lists!!!
 vector
-    :: forall n s. Reifies s W
+    :: forall n s. (KnownNat n, Reifies s W)
     => SV.Vector n (BVar s H.ℝ)
     -> BVar s (H.R n)
 vector = BE.isoVar afSV
@@ -1112,28 +1112,32 @@ toRows
     :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector m (BVar s (H.R n))
-toRows = runABP . sequenceVar . isoVar (coerce H.lRows) (coerce H.rowsL)
+toRows = runABP . sequenceVar
+       . isoVar (coerce (H.lRows @m)) (coerce H.rowsL)
 {-# INLINE toRows #-}
 
 toColumns
     :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => BVar s (H.L m n)
     -> SV.Vector n (BVar s (H.R m))
-toColumns = runABP . sequenceVar . isoVar (coerce H.lCols) (coerce H.colsL)
+toColumns = runABP . sequenceVar
+          . isoVar (coerce (H.lCols @_ @n)) (coerce H.colsL)
 {-# INLINE toColumns #-}
 
 fromRows
-    :: forall m n s. (KnownNat m, Reifies s W)
+    :: forall m n s. (KnownNat m, KnownNat n, Reifies s W)
     => SV.Vector m (BVar s (H.R n))
     -> BVar s (H.L m n)
-fromRows = isoVar (coerce H.rowsL) (coerce H.lRows) . collectVar . ABP
+fromRows = isoVar (coerce H.rowsL) (coerce (H.lRows @m))
+         . collectVar . ABP
 {-# INLINE fromRows #-}
 
 fromColumns
-    :: forall m n s. (KnownNat n, Reifies s W)
+    :: forall m n s. (KnownNat n, KnownNat m, Reifies s W)
     => SV.Vector n (BVar s (H.R m))
     -> BVar s (H.L m n)
-fromColumns = isoVar (coerce H.colsL) (coerce H.lCols) . collectVar . ABP
+fromColumns = isoVar (coerce H.colsL) (coerce (H.lCols @_ @n))
+            . collectVar . ABP
 {-# INLINE fromColumns #-}
 
 konst

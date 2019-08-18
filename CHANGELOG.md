@@ -1,6 +1,17 @@
 Changelog
 =========
 
+Version 0.1.3.0
+---------------
+
+*August 18, 2019*
+
+<https://github.com/mstksg/hmatrix-backprop/releases/tag/v0.1.3.0>
+
+*   Fix for compatibility with *hmatrix-vector-sized-0.1.2.0*.  However, this
+    is potentially a breaking change because `vector`, `fromRows`, and
+    `fromColumns` now all require extra `KnownNat` constraints.
+
 Version 0.1.2.5
 ---------------
 
