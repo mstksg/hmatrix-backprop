@@ -123,6 +123,13 @@ module Numeric.LinearAlgebra.Static.Backprop (
   , H.C
   , H.M
   , H.𝑖
+  , toComplex
+  , fromComplex
+  , complex
+  , real
+  , imag
+  , sqMagnitude
+  , magnitude
   -- * Products
   , (<>)
   , (#>)
@@ -1305,3 +1312,41 @@ infixr 8 <·>
 afSV :: Backprop a => BE.AddFunc (SV.Vector n a)
 afSV = BE.AF (SV.zipWith add)
 {-# INLINE afSV #-}
+
+
+
+-- support for complex types
+toComplex :: (KnownNat n, Reifies s W)
+          => BVar s (H.R n) -> BVar s (H.R n) -> BVar s (H.C n)
+toComplex = isoVar2 (curry H.toComplex) H.fromComplex
+{-# INLINE toComplex #-}
+
+fromComplex :: (KnownNat n, Reifies s W)
+            => BVar s (H.C n) -> (BVar s (H.R n), BVar s (H.R n))
+fromComplex c = let ri = isoVar H.fromComplex H.toComplex c in (ri ^^. _1, ri ^^. _2)
+{-# INLINE fromComplex #-}
+
+complex :: (KnownNat n, Reifies s W)
+       => BVar s (H.R n) -> BVar s (H.C n)
+complex = isoVar H.complex H.real
+{-# INLINE complex #-}
+
+real :: (KnownNat n, Reifies s W)
+     => BVar s (H.C n) -> BVar s (H.R n)
+real = isoVar H.real (\r -> H.toComplex (r, H.konst 0))
+{-# INLINE real #-}
+
+imag :: (KnownNat n, Reifies s W)
+     => BVar s (H.C n) -> BVar s (H.R n)
+imag = isoVar H.imag (\r -> H.toComplex (H.konst 0, r))
+{-# INLINE imag #-}
+
+sqMagnitude :: (KnownNat n, Reifies s W)
+            => BVar s (H.C n) -> BVar s (H.R n)
+sqMagnitude c = let (r,i) = fromComplex c in r**2 + i**2
+{-# INLINE sqMagnitude #-}
+
+magnitude :: (KnownNat n, Reifies s W)
+            => BVar s (H.C n) -> BVar s (H.R n)
+magnitude c = sqrt $ sqMagnitude c
+{-# INLINE magnitude #-}
